@@ -1,0 +1,24 @@
+auragate-core/
+│
+├── backend/                  # 🧠 TRIGGER'S DOMAIN (Python/FastAPI)
+│   ├── main.py               # Application entry point
+│   ├── requirements.txt      # Python dependencies
+│   ├── api/                  # API Endpoints (e.g., twilio.py, entry.py)
+│   ├── core/                 # Configs, Security, DB Connections
+│   └── services/             # External API logic (Twilio/Bhashini wrappers)
+│
+├── frontend/                 # 🎨 CHOMU'S DOMAIN (Next.js / React)
+│   ├── package.json          # Node dependencies
+│   ├── public/               # Images, Icons
+│   └── src/
+│       ├── components/       # Reusable UI (TrafficLight.jsx, Timer.jsx)
+│       ├── pages/            # GuardUI, ResidentApp, AdminDashboard
+│       └── utils/            # API call helpers (axios/fetch logic)
+│
+├── docs/                     # 📋 PSW'S DOMAIN
+│   ├── architecture.png      # Napkin AI Diagrams
+│   ├── PPT_Deck.pdf          # Final presentation
+│   └── API_CONTRACT.md       # (Crucial: How frontend talks to backend)
+│
+├── .gitignore                # Ignore node_modules, venv, .env files!
+└── README.md                 # The polished README we just wrote

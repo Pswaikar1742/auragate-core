@@ -1,5 +1,5 @@
 # AuraGate: Context-Aware, Zero-Friction Gate Security
-![AuraGate Architecture](URL_TO_YOUR_NAPKIN_AI_DIAGRAM_IMAGE)
+![AuraGate Architecture](/home/psw/Projects/auragate/auragate-core/system_architecture.png)
 
 **AuraGate** is a full-stack, AI-driven visitor and resident security platform designed for gated communities. It moves beyond simple "digital logbooks" to create a proactive security engine that fixes the fundamental flaws in existing systems: guard cognitive overload, resident notification fatigue, and static security vulnerabilities.
 
@@ -64,6 +64,6 @@ AuraGate is engineered with a "Privacy by Design" philosophy to adhere to the hi
 ---
 
 ## 👥 Team
-*   **Prathmesh Waikar (PSW):** Product & Strategy
-*   **Mohammad Syed Ali (Trigger):** Backend & AI/Security
-*   **Shreyas Mudholkar (Chomu):** UI/UX & Frontend
+*   **Prathmesh Waikar :** Product & Strategy
+*   **Mohammad Syed Ali :** Backend & AI/Security
+*   **Shreyas Mudholkar :** UI/UX & Frontend
