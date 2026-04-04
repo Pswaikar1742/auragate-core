@@ -41,10 +41,10 @@ sqlite3.OperationalError: attempt to write a readonly database
 - Results: Tests added; in this environment the failing case (no phone) passed; the success path failed due to a local SQLite file write/permission issue when the test attempted to insert an escalation row.
 - Blockers:
   - Test run in this CI-like environment hit a `readonly database` error for the success path when using a file-backed SQLite DB. This appears environment-specific (file path or process/thread permissions) and not related to Twilio network calls.
-- Next Step:
-  - Run the tests locally (recommended) using the commands below; if the `readonly` error appears, remove or change the test DB path or run with writeable temp directory (the tests default to `/tmp/auragate_test.db`).
+ - Next Step:
+   - Primary: re-run the smoke tests in a writable environment (local dev or CI job with a writable temp-dir). Prefer using pytest's `tmp_path` fixture or explicitly setting a temp SQLite file under `/tmp` to avoid permission issues.
 
-Commands to run locally:
+Commands to run locally (example):
 
 ```
 source .venv/bin/activate
@@ -52,13 +52,19 @@ pip install -r backend/requirements.txt
 pytest -q backend/tests/test_escalate.py
 ```
 
-Expected (successful) test output on a writable environment:
+Alternatives & mitigation if Twilio or network calls are unavailable:
 
-```
-INFO:httpx:HTTP Request: POST http://testserver/api/escalate "HTTP/1.1 400 Bad Request"
-..
-2 passed in 0.3s
-```
+- **Keep mocking Twilio in CI:** the tests already monkeypatch `_trigger_twilio_call` — keep this for CI to avoid network dependency.
+- **Twilio Test Credentials / Magic Numbers:** use Twilio's test mode to simulate call outcomes without live calls.
+- **Adapter pattern for IVR:** implement an `IVR_ADAPTER` abstraction so you can swap providers (SignalWire, Telnyx, Bandwidth, Plivo) or inject a `noop_adapter` during tests.
+- **Local stub / webhook emulator:** run a small stub server for Twilio webhooks or use `ngrok` to test real callbacks without production credentials.
+
+Recommended short-term next steps:
+
+1. Fix test DB writability: update the test to use `tmp_path` or set `DATABASE_URL=sqlite:////tmp/auragate_test.db` during test runs.
+2. Keep Twilio calls mocked for CI; assert the call invocation in tests (current approach).
+3. Add a small `IVR_ADAPTER` interface and a `noop/test` adapter for easier provider switching and clearer integration tests.
+4. For manual E2E checks, use Twilio test credentials or a trial account from a writable dev environment and verify the IVR call path.
 
 
 ## 2026-04-04
