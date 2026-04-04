@@ -79,6 +79,14 @@ class GuardTotpResponse(BaseModel):
     interval_seconds: int
 
 
+class EscalateRequest(BaseModel):
+    """Request model for explicit escalation trigger."""
+
+    flat_number: str = Field(..., min_length=1, max_length=32)
+    visitor_type: str = Field(..., min_length=1, max_length=32)
+    status: str = Field(default="timeout")
+
+
 class ConnectionManager:
     """Tracks active resident WebSocket connections by flat number."""
 
@@ -391,7 +399,42 @@ async def resident_socket(websocket: WebSocket, flat_number: str) -> None:
                 await websocket.send_json({"event": "pong"})
     except WebSocketDisconnect:
         await ws_manager.disconnect(flat_number, websocket)
+    class EscalateRequest(BaseModel):
+        flat_number: str
+        visitor_type: str
+        status: str = "timeout"
 
+
+@app.post("/api/escalate")
+async def escalate(request: EscalateRequest, db: Session = Depends(get_db)) -> dict:
+    resident = db.query(models.Resident).filter(models.Resident.flat_number == request.flat_number).first()
+    phone_number = resident.phone_number if resident else os.getenv("TO_PHONE_NUMBER")
+    if not phone_number:
+        raise HTTPException(status_code=400, detail="No phone number configured for resident or fallback")
+
+    # record an escalation row (optional but useful for auditing)
+    visitor = models.VisitorLog(
+        visitor_name=f"Escalation: {request.visitor_type}",
+        visitor_type=request.visitor_type,
+        flat_number=request.flat_number,
+        status=STATUS_ESCALATED_IVR,
+    )
+    db.add(visitor)
+    db.commit()
+    db.refresh(visitor)
+
+    # notify any connected residents in real time
+    visitor_payload = _serialize_visitor(visitor)
+    await ws_manager.broadcast(
+        request.flat_number,
+        {"event": "visitor_escalated", "visitor": visitor_payload.model_dump(mode="json")},
+    )
+
+    # trigger IVR
+    call_sid = await _trigger_twilio_call(phone_number, visitor)
+    if not call_sid:
+        return {"success": False, "message": "Failed to trigger IVR Call"}
+    return {"success": True, "message": "IVR Call Triggered to Resident"}
 
 if __name__ == "__main__":
     import uvicorn
