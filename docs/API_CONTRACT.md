@@ -153,6 +153,13 @@ This file defines the current stateful prototype API behavior.
 }
 ```
 
+### Curl Example (smoke test)
+```bash
+curl -sS -X POST -H "Content-Type: application/json" \
+	-d '{"flat_number":"T4-401","visitor_type":"Delivery"}' \
+	http://localhost:8000/api/escalate
+```
+
 ## Escalation Timer Contract
 - On every check-in, backend starts `asyncio.create_task(escalation_timer(...))`.
 - Timer sleeps for 30 seconds.

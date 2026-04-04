@@ -35,3 +35,5 @@ Deliver a reliable FastAPI escalation endpoint that triggers Twilio call flow fo
   WebSocket manager, and async escalation timer.
 - Added endpoints: check-in, approve, guard TOTP, and resident WebSocket channel.
 - Contract docs updated for new endpoint set and event schema.
+ - Recent fixes: moved `EscalateRequest` Pydantic model to module scope to ensure route validation succeeds and avoid runtime NameErrors.
+ - Smoke test: POST `/api/escalate` returns `400` with `{ "detail": "No phone number configured for resident or fallback" }` when `TO_PHONE_NUMBER` or resident phone is not configured; endpoint reachable and error behavior validated.

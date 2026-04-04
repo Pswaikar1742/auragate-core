@@ -66,6 +66,37 @@ The PoC will demonstrate our most critical user-facing feature: the **Omni-Chann
 *   **Objective:** To showcase a live demo where a simulated visitor triggers a notification, a 15-second timer runs out, and a **Twilio-powered IVR call** is successfully made to a physical phone, bypassing its "Do Not Disturb" mode.
 *   **Status:** In Progress.
 
+### Local Quickstart: Escalation smoke test
+
+Use these steps to run a minimal local smoke test for the escalation endpoint.
+
+1. Start a local Postgres instance (docker required):
+
+```bash
+docker compose up -d postgres
+```
+
+2. Activate the Python virtualenv and run the backend:
+
+```bash
+source .venv/bin/activate
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+3. Run a smoke POST to `/api/escalate`:
+
+```bash
+curl -sS -X POST -H "Content-Type: application/json" \
+    -d '{"flat_number":"T4-401","visitor_type":"Delivery"}' \
+    http://localhost:8001/api/escalate
+```
+
+Expected outcomes:
+- If `TO_PHONE_NUMBER` (or a resident phone) is not configured, the endpoint returns `400` with a JSON payload: `{ "detail": "No phone number configured for resident or fallback" }`.
+- If `TO_PHONE_NUMBER` and Twilio credentials are configured, the endpoint attempts to place an IVR call and returns `{ "success": true, "message": "IVR Call Triggered to Resident" }` on success (or a failure message if Twilio errors).
+
+Environment variables: see `.env.example` for the full list. Set `TO_PHONE_NUMBER` to a reachable phone in E.164 format (e.g. `+919876543210`) to test call routing.
+
 ### Future Scope
 *   **Phase 1:** Full Bhashini API and Neo4j integration.
 *   **Phase 2:** ANPR (Automatic Number Plate Recognition) for automated vehicle entry.

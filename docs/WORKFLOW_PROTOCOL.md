@@ -55,6 +55,27 @@ def recursive_test_loop():
 - Manual API probe: `POST /api/escalate` with contract payload.
 - Golden Thread run: simulate visitor -> countdown -> escalation call attempt.
 
+### Manual API Probe Examples
+Use these quick curl examples for smoke testing the escalation path.
+
+1) Validate endpoint reachable and error behavior when no routing phone is configured:
+
+```bash
+curl -sS -X POST -H "Content-Type: application/json" \
+    -d '{"flat_number":"T4-401","visitor_type":"Delivery"}' \
+    http://localhost:8000/api/escalate
+# Expected: 400 with JSON {"detail":"No phone number configured for resident or fallback"}
+```
+
+2) Example (when `TO_PHONE_NUMBER` or resident phone is configured):
+
+```bash
+curl -sS -X POST -H "Content-Type: application/json" \
+    -d '{"flat_number":"T4-401","visitor_type":"Delivery"}' \
+    http://localhost:8000/api/escalate
+# Expected: {"success": true, "message": "IVR Call Triggered to Resident"} OR a failure message if Twilio credentials missing
+```
+
 ## Evidence Requirements
 A cycle is valid only if docs capture:
 - what changed
