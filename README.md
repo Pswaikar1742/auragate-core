@@ -7,6 +7,24 @@
 
 ---
 
+## 📘 Execution Protocol (Docs-First)
+All implementation must follow the repository docs protocol before coding.
+
+**Read order for every prompt cycle:**
+1. `docs/SYSTEM_INSTRUCTIONS.md`
+2. `docs/README.md`
+3. `plan.md`
+4. `docs/phases/README.md`
+5. Active phase file
+6. `docs/STATE_LOG.md`
+7. `docs/API_CONTRACT.md` and `docs/AURAGATE_CONTEXT.md` as needed
+
+For full process details, see:
+- `docs/WORKFLOW_PROTOCOL.md`
+- `docs/PROMPT_PROTOCOL.md`
+
+---
+
 ## 🎯 The Core Problem
 Traditional gate security apps fail in three key areas of Indian ground reality:
 1.  **Friction & Speed:** Forcing gig workers into slow, humiliating AI scans causes massive gate traffic jams and frustrates delivery partners.

@@ -28,45 +28,32 @@ You are an expert Cloud‑Native Systems Architect and Senior Full‑Stack Devel
 ## 3. Monorepo architecture
 
 - `/frontend` — Next.js / React (Guard Tablet UI, Resident App UI, Admin Dashboard). Tailwind CSS for styling.
-- `/backend` — Python FastAPI (business logic, external API triggers, DB access).
+- `/backend` — Python FastAPI (business logic, PostgreSQL access, WebSocket fan-out, background escalation tasks).
 - Note: production realtime routing may use Golang WebSockets + Redis.
 
-## 4. Current MVP / Proof of Concept (the "Golden Thread")
+## 4. Current Stateful Prototype Focus (the "Golden Thread")
 
-We are building the Round‑2 live demo. Focus exclusively on the IVR escalation golden thread — do not implement the full Neo4j or Bhashini integrations for this demo.
+We are now past the mock-only MVP and implementing a real stateful prototype with persistence and real-time communication.
 
-MVP flow:
+Current flow:
 
-1. Frontend: a React dashboard includes a "Simulate Visitor" button.
-2. Clicking the button starts a 15‑second countdown timer in the UI.
-3. When the timer reaches `0` the frontend sends a `POST` to the backend.
-4. Backend (FastAPI) receives the payload and calls Twilio to initiate an IVR phone call to the resident.
-5. Expected outcome: an automated voice call rings the resident's physical mobile number.
+1. Guard checks in a visitor (`POST /api/visitors/check-in`).
+2. Backend writes to `VisitorLog` (`pending`) in PostgreSQL.
+3. Backend emits a resident WebSocket event (`visitor_checked_in`).
+4. Backend starts a 30-second async escalation timer.
+5. Resident approves via `PUT /api/visitors/{id}/approve` OR ignores.
+6. If ignored and still `pending`, backend marks `escalated_ivr` and triggers Twilio voice call.
 
 ## 5. Strict API contract
 
-- **Endpoint:** `POST /api/escalate` (local testing via ngrok is acceptable)
+Primary endpoints for current prototype:
+- `POST /api/visitors/check-in`
+- `PUT /api/visitors/{id}/approve`
+- `GET /api/guard/totp`
+- `GET /health`
+- WebSocket: `/ws/resident/{flat_number}`
 
-- **Request payload (exact JSON):**
-
-```json
-{
-  "flat_number": "402",
-  "visitor_type": "Delivery",
-  "status": "timeout"
-}
-```
-
-- **Response payload (exact JSON):**
-
-```json
-{
-  "success": true,
-  "message": "IVR Call Triggered to Resident"
-}
-```
-
-When you generate frontend `fetch`/`axios` calls or backend FastAPI routes, use these exact schemas to ensure interoperability.
+Use `docs/API_CONTRACT.md` as the source of truth for payload and response schemas.
 
 ## 6. Development protocols
 
@@ -76,15 +63,15 @@ When you generate frontend `fetch`/`axios` calls or backend FastAPI routes, use 
   - `TWILIO_ACCOUNT_SID`
   - `TWILIO_AUTH_TOKEN`
   - `TWILIO_PHONE_NUMBER`
-  - `MY_VERIFIED_NUMBER`
+  - `TO_PHONE_NUMBER`
 
 - **Security note:** Ensure `.env` is listed in `.gitignore` and avoid committing sensitive data.
 
 ## 7. Constraints & decisions
 
-- Focus on the IVR escalation golden thread for the demo.
-- Keep API contracts minimal and exact.
-- Defer full Neo4j / Bhashini implementations until after the demo.
+- Keep focus on the escalation golden thread while using real persistence and realtime signals.
+- Keep API contracts explicit and synchronized with docs.
+- Defer full Neo4j / Bhashini feature set until after prototype stabilization.
 
 ---
 

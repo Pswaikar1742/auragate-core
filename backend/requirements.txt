@@ -1,2 +1,7 @@
-fastapi
-uvicorn
+fastapi==0.115.2
+uvicorn[standard]==0.30.6
+sqlalchemy==2.0.36
+psycopg[binary]==3.2.13
+pyotp==2.9.0
+twilio==9.3.2
+python-dotenv==1.0.1
