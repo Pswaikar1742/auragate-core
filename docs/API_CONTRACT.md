@@ -122,6 +122,37 @@ This file defines the current stateful prototype API behavior.
 }
 ```
 
+## Endpoint: Escalate
+- Method: POST
+- Path: /api/escalate
+- Purpose: Trigger an IVR escalation for a specific flat when a timer or external monitor decides to escalate.
+
+### Request Body
+```json
+{
+  "flat_number": "T4-401",
+  "visitor_type": "Delivery",
+  "status": "timeout"
+}
+```
+
+### Success Response
+- Status: 200 OK
+```json
+{
+  "success": true,
+  "message": "IVR Call Triggered to Resident"
+}
+```
+
+### Failure Response
+- Status: 400 Bad Request (e.g., no phone configured)
+```json
+{
+  "detail": "No phone number configured for resident or fallback"
+}
+```
+
 ## Escalation Timer Contract
 - On every check-in, backend starts `asyncio.create_task(escalation_timer(...))`.
 - Timer sleeps for 30 seconds.

@@ -75,3 +75,23 @@ Next Step:
   - Editor diagnostics still report unresolved imports in `backend/main.py` despite successful runtime installs and compile checks.
 - Next Step:
   - Execute phase-04 integration loops with live DB + WebSocket + Twilio environment variables configured.
+
+---
+
+## 2026-04-04 (Cycle 4)
+- Date: 2026-04-04
+- Phase: 02 Backend fixes
+- Prompt Summary: Move `EscalateRequest` to module scope, add `/api/escalate` contract, and add phase tracking TODOs; run a smoke test.
+- Changes Made:
+  - Moved `EscalateRequest` model to module scope in `backend/main.py` to ensure FastAPI/Pydantic validation works correctly.
+  - Added `/api/escalate` documentation to `docs/API_CONTRACT.md`.
+  - Added tracking TODOs to `docs/phases/phase-02-backend-escalation-core.md`.
+- Tests/Checks Run:
+  - Updated code and documentation files; attempted to run backend smoke test (port 8000 was in use in local session).
+- Results:
+  - Code changes applied and docs updated. Escalate model now defined at module scope.
+  - Smoke test pending — backend port 8000 conflict detected; recommended to start server on an available port or stop the process using 8000 and rerun smoke test.
+- Blockers:
+  - Local port 8000 was already in use during smoke test attempt; server not started in this cycle.
+- Next Step:
+  - Start backend on an available port and run the provided `curl` smoke test; commit changes with message: "fix(backend): move EscalateRequest to module scope; docs(api): add /api/escalate contract; TODOs for Phase 02".

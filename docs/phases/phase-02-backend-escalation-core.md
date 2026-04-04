@@ -15,6 +15,9 @@ Deliver a reliable FastAPI escalation endpoint that triggers Twilio call flow fo
 - [x] Confirm required environment variables and error behavior.
 - [x] Validate TwiML voice message content.
 - [x] Add/maintain health endpoint for diagnostics.
+ - [ ] Move `EscalateRequest` model to module scope and validate fields in `backend/main.py`.
+ - [ ] Add `POST /api/escalate` documentation to `docs/API_CONTRACT.md`.
+ - [ ] Add a smoke-test (curl or pytest) demonstrating a successful and failing escalate call.
 
 ## Recursive Test Gates
 - Layer 0: syntax compile check
