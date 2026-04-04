@@ -37,6 +37,22 @@ Next Step:
 - Next Step:
   - Execute active phase tasks through `docs/phases/phase-01-foundation-and-architecture.md` and continue phase by phase.
 
+## 2026-04-04 (Cycle 3)
+- Date: 2026-04-04
+- Phase: Infra bootstrap
+- Prompt Summary: Add Docker Compose and environment example for local development (Postgres, Redis, Neo4j, backend, frontend, event-router skeleton)
+- Changes Made:
+  - Added `docker-compose.yml` to orchestrate Postgres, Redis, Neo4j, backend, frontend and an event-router skeleton
+  - Added `.env.example` with sample env vars for local development
+- Tests/Checks Run:
+  - Created compose file and env example (no docker runtime executed in this cycle)
+- Results:
+  - Files added and staged for commit on feature branch
+- Blockers:
+  - Docker not executed here; developer should run `docker compose up` locally to validate
+- Next Step:
+  - Create Dockerfiles for `backend` and `frontend`, then iterate on event-router and Redis pub/sub bridging.
+
 ## 2026-04-04 (Cycle 2)
 - Date: 2026-04-04
 - Phase: 02 + 03 implementation (cross-phase by explicit prompt scope)
