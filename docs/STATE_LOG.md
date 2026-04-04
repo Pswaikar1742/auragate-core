@@ -95,3 +95,22 @@ Next Step:
   - Local port 8000 was already in use during smoke test attempt; server not started in this cycle.
 - Next Step:
   - Start backend on an available port and run the provided `curl` smoke test; commit changes with message: "fix(backend): move EscalateRequest to module scope; docs(api): add /api/escalate contract; TODOs for Phase 02".
+
+---
+
+## 2026-04-04 (Cycle 5)
+- Date: 2026-04-04
+- Phase: 02 Backend fixes — Smoke test
+- Prompt Summary: Start local Postgres, run backend, and POST to `/api/escalate` to validate endpoint behavior.
+- Changes Made:
+  - Started `postgres` service via `docker compose up -d postgres`.
+  - Launched backend locally on port `8001` for smoke testing.
+- Tests/Checks Run:
+  - POST `/api/escalate` with `flat_number=T4-401` and `visitor_type=Delivery`.
+- Results:
+  - Response: `{ "detail": "No phone number configured for resident or fallback" }` — expected when `TO_PHONE_NUMBER`/resident phone is not configured.
+  - Confirms endpoint is reachable and returns sensible error behavior when escalation cannot be routed.
+- Blockers:
+  - Twilio/TO_PHONE_NUMBER not configured for triggering an actual IVR call.
+- Next Step:
+  - Configure `TO_PHONE_NUMBER` or seed demo residents, then rerun the smoke test to verify IVR call path (or mock Twilio credentials for testing).
