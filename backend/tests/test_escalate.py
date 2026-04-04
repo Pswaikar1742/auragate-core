@@ -1,31 +1,53 @@
 import os
 import importlib
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so `import backend.*` works when pytest
+# executes from the tests folder.
+ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
 
 from fastapi.testclient import TestClient
 
 
 def _prepare_app(to_phone: str | None = None):
-    """Prepare the app with an in-memory SQLite DB and optional fallback phone.
+    """Prepare the app with a SQLite file DB and optional fallback phone.
 
-    This sets `DATABASE_URL` before reloading the DB and app modules so the
-    in-memory engine is used for tests.
+    Using a file-backed SQLite DB avoids SQLite "same thread" and
+    in-memory connection isolation when running the TestClient in a
+    multi-threaded test harness.
     """
 
-    os.environ["DATABASE_URL"] = "sqlite:///:memory:"
+    # Use a small file DB for test stability in threaded test runners.
+    os.environ["DATABASE_URL"] = "sqlite:///./test_sqlite.db"
     if to_phone is None:
         os.environ.pop("TO_PHONE_NUMBER", None)
     else:
         os.environ["TO_PHONE_NUMBER"] = to_phone
 
-    # Reload database module so it picks up the env var and recreates engine
-    import backend.database as database
+    # Remove any previous test DB and create tables before importing the app so
+    # the SQLAlchemy metadata is present and tables exist on the engine the app
+    # will use. Avoid reloading modules to keep SQLAlchemy metadata stable.
+    # use an absolute, temp directory-backed sqlite file to avoid
+    # relative-path permission issues in CI or container environments
+    db_path = "/tmp/auragate_test.db"
+    try:
+        os.remove(db_path)
+    except Exception:
+        pass
+    os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
 
-    importlib.reload(database)
+    if to_phone is None:
+        os.environ.pop("TO_PHONE_NUMBER", None)
+    else:
+        os.environ["TO_PHONE_NUMBER"] = to_phone
+
+    import backend.models as models
+    import backend.database as database
     database.create_db_and_tables()
 
     import backend.main as main
-
-    importlib.reload(main)
     return main
 
 

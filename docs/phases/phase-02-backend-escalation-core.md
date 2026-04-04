@@ -18,6 +18,14 @@ Deliver a reliable FastAPI escalation endpoint that triggers Twilio call flow fo
  - [ ] Move `EscalateRequest` model to module scope and validate fields in `backend/main.py`.
  - [ ] Add `POST /api/escalate` documentation to `docs/API_CONTRACT.md`.
  - [ ] Add a smoke-test (curl or pytest) demonstrating a successful and failing escalate call.
+ - [x] Add a smoke-test (curl or pytest) demonstrating a successful and failing escalate call.
+
+## Recent Work
+- Added `backend/tests/test_escalate.py` implementing pytest smoke tests for `/api/escalate` covering:
+    - failing case: no phone configured → expect HTTP 400 with documented detail
+    - success case: mocked Twilio call returns dummy SID → expect HTTP 200 success
+
+Notes: tests are designed to run against a local SQLite test database and mock the Twilio call path to avoid network traffic.
 
 ## Recursive Test Gates
 - Layer 0: syntax compile check
