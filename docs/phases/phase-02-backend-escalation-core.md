@@ -15,9 +15,8 @@ Deliver a reliable FastAPI escalation endpoint that triggers Twilio call flow fo
 - [x] Confirm required environment variables and error behavior.
 - [x] Validate TwiML voice message content.
 - [x] Add/maintain health endpoint for diagnostics.
- - [ ] Move `EscalateRequest` model to module scope and validate fields in `backend/main.py`.
- - [ ] Add `POST /api/escalate` documentation to `docs/API_CONTRACT.md`.
- - [ ] Add a smoke-test (curl or pytest) demonstrating a successful and failing escalate call.
+ - [x] Move `EscalateRequest` model to module scope and validate fields in `backend/main.py`.
+ - [x] Add `POST /api/escalate` documentation to `docs/API_CONTRACT.md`.
  - [x] Add a smoke-test (curl or pytest) demonstrating a successful and failing escalate call.
 
 ## Recent Work
@@ -44,6 +43,21 @@ Twilio-related behavior observed during smoke tests was a symptom of a local SQL
 3. Add a small `IVR_ADAPTER` abstraction so providers are swappable and tests can inject a `noop_adapter` or a `test_adapter`.
 4. For manual integration verification, use Twilio test credentials or a short SignalWire/Telnyx trial account from a writable environment.
 5. Document the chosen approach in `docs/STATE_LOG.md` and in this phase file for traceability.
+
+## Phase Complete
+
+Date: 2026-04-05
+
+Phase 02 work is functionally complete for the acceptance criteria listed above. Changes implemented in this phase include:
+
+- `POST /api/escalate` endpoint with validation and escalation behavior.
+- Pytests covering failure (no phone configured) and success (IVR path exercised via `NoopAdapter`) in `backend/tests/test_escalate.py`.
+- `IVRAdapter` abstraction (`backend/ivr_adapter.py`) and adapter injection API in `backend/main.py` (`set_ivr_adapter`, `clear_ivr_adapter`).
+- Safety for CI: `IVR_ADAPTER=noop` is set in CI workflow to avoid external calls.
+
+Relevant PR: https://github.com/Pswaikar1742/auragate-core/pull/1
+
+Exit action items completed: run smoke tests locally (passed), added CI workflow to run tests on PRs, and documented outcomes in `docs/STATE_LOG.md`.
 
 ## Recursive Test Gates
 - Layer 0: syntax compile check
