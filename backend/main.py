@@ -9,7 +9,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any
+from typing import Any, Optional
 
 try:
     import pyotp
@@ -20,7 +20,31 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from .ivr_adapter import get_adapter
+from .ivr_adapter import get_adapter, IVRAdapter
+
+# Module-level override to allow tests to inject a test adapter instance.
+_ivr_adapter_override: Optional[IVRAdapter] = None
+
+
+def set_ivr_adapter(adapter: Optional[IVRAdapter]) -> None:
+    """Inject an IVR adapter instance for runtime or tests.
+
+    Pass `None` to clear the override and fall back to `get_adapter()`.
+    """
+    global _ivr_adapter_override
+    _ivr_adapter_override = adapter
+
+
+def clear_ivr_adapter() -> None:
+    """Clear any previously injected IVR adapter."""
+    set_ivr_adapter(None)
+
+
+def _get_effective_ivr_adapter() -> IVRAdapter:
+    """Return the injected adapter if present, otherwise resolve via `get_adapter()`."""
+    if _ivr_adapter_override is not None:
+        return _ivr_adapter_override
+    return get_adapter()
 
 try:
     from . import models
@@ -177,7 +201,7 @@ def _twilio_message(visitor_name: str, visitor_type: str, flat_number: str) -> s
 async def _trigger_ivr_call(phone_number: str, visitor: models.VisitorLog) -> str | None:
     """Trigger an IVR call via the configured IVR adapter. Returns SID-like token on success."""
 
-    adapter = get_adapter()
+    adapter = _get_effective_ivr_adapter()
     twiml = _twilio_message(visitor.visitor_name, visitor.visitor_type, visitor.flat_number)
 
     try:
