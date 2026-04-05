@@ -66,12 +66,9 @@ def test_escalate_fails_when_no_phone_configured():
 
 def test_escalate_success_path_with_mocked_twilio(monkeypatch):
     # Provide a fallback phone so the endpoint proceeds to trigger the IVR path.
+    # Force the test adapter to noop so no network calls are attempted.
+    os.environ["IVR_ADAPTER"] = "noop"
     main = _prepare_app("+15555550123")
-
-    async def _fake_trigger(phone, visitor):
-        return "FAKE_SID"
-
-    monkeypatch.setattr(main, "_trigger_twilio_call", _fake_trigger)
 
     client = TestClient(main.app)
     resp = client.post(

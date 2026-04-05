@@ -17,9 +17,7 @@ from fastapi import Depends, FastAPI, HTTPException, WebSocket, WebSocketDisconn
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
-from starlette.concurrency import run_in_threadpool
-from twilio.base.exceptions import TwilioException
-from twilio.rest import Client
+from .ivr_adapter import get_adapter
 
 try:
     from . import models
@@ -167,42 +165,30 @@ def _twilio_message(visitor_name: str, visitor_type: str, flat_number: str) -> s
     )
 
 
-async def _trigger_twilio_call(phone_number: str, visitor: models.VisitorLog) -> str | None:
-    """Place a Twilio voice call; returns Call SID on success."""
+async def _trigger_ivr_call(phone_number: str, visitor: models.VisitorLog) -> str | None:
+    """Trigger an IVR call via the configured IVR adapter. Returns SID-like token on success."""
 
-    account_sid = os.getenv("TWILIO_ACCOUNT_SID")
-    auth_token = os.getenv("TWILIO_AUTH_TOKEN")
-    from_phone = os.getenv("TWILIO_PHONE_NUMBER")
-
-    missing = [
-        key
-        for key, value in (
-            ("TWILIO_ACCOUNT_SID", account_sid),
-            ("TWILIO_AUTH_TOKEN", auth_token),
-            ("TWILIO_PHONE_NUMBER", from_phone),
-        )
-        if not value
-    ]
-    if missing:
-        logger.error("Cannot call Twilio. Missing env vars: %s", ", ".join(missing))
-        return None
-
+    adapter = get_adapter()
     twiml = _twilio_message(visitor.visitor_name, visitor.visitor_type, visitor.flat_number)
-    client = Client(account_sid, auth_token)
 
     try:
-        call = await run_in_threadpool(
-            client.calls.create,
-            to=phone_number,
-            from_=from_phone,
-            twiml=twiml,
-        )
-    except TwilioException as exc:
-        logger.exception("Twilio escalation failed for visitor_id=%s: %s", visitor.id, exc)
+        result = await adapter.trigger_call(phone_number, twiml)
+    except Exception as exc:
+        logger.exception("IVR adapter failed for visitor_id=%s: %s", visitor.id, exc)
         return None
 
-    logger.info("Twilio call triggered for visitor_id=%s, call_sid=%s", visitor.id, call.sid)
-    return call.sid
+    sid = None
+    if isinstance(result, dict):
+        sid = result.get("sid")
+    elif isinstance(result, str):
+        sid = result
+
+    if not sid:
+        logger.error("IVR adapter returned no sid for visitor_id=%s result=%s", visitor.id, result)
+        return None
+
+    logger.info("IVR call triggered for visitor_id=%s, call_sid=%s", visitor.id, sid)
+    return sid
 
 
 def _seed_demo_residents() -> None:
@@ -259,7 +245,7 @@ async def escalation_timer(visitor_id: uuid.UUID, flat_number: str) -> None:
         )
         return
 
-    await _trigger_twilio_call(phone_number, visitor)
+    await _trigger_ivr_call(phone_number, visitor)
 
 
 @asynccontextmanager
@@ -431,7 +417,7 @@ async def escalate(request: EscalateRequest, db: Session = Depends(get_db)) -> d
     )
 
     # trigger IVR
-    call_sid = await _trigger_twilio_call(phone_number, visitor)
+    call_sid = await _trigger_ivr_call(phone_number, visitor)
     if not call_sid:
         return {"success": False, "message": "Failed to trigger IVR Call"}
     return {"success": True, "message": "IVR Call Triggered to Resident"}
