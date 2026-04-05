@@ -9,6 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
 from fastapi.testclient import TestClient
+from backend.ivr_adapter import NoopAdapter
 
 
 def _prepare_app(to_phone: str | None = None):
@@ -55,15 +56,18 @@ def test_escalate_fails_when_no_phone_configured():
 
 def test_escalate_success_path_with_mocked_twilio(monkeypatch):
     # Provide a fallback phone so the endpoint proceeds to trigger the IVR path.
-    # Force the test adapter to noop so no network calls are attempted.
-    os.environ["IVR_ADAPTER"] = "noop"
     main = _prepare_app("+15555550123")
 
-    client = TestClient(main.app)
-    resp = client.post(
-        "/api/escalate",
-        json={"flat_number": "T4-401", "visitor_type": "Delivery", "status": "timeout"},
-    )
+    # Inject NoopAdapter to avoid network calls and make behavior deterministic.
+    main.set_ivr_adapter(NoopAdapter())
+    try:
+        client = TestClient(main.app)
+        resp = client.post(
+            "/api/escalate",
+            json={"flat_number": "T4-401", "visitor_type": "Delivery", "status": "timeout"},
+        )
 
-    assert resp.status_code == 200
-    assert resp.json() == {"success": True, "message": "IVR Call Triggered to Resident"}
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True, "message": "IVR Call Triggered to Resident"}
+    finally:
+        main.clear_ivr_adapter()
