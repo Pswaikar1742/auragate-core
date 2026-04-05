@@ -19,23 +19,12 @@ def _prepare_app(to_phone: str | None = None):
     multi-threaded test harness.
     """
 
-    # Use a small file DB for test stability in threaded test runners.
-    os.environ["DATABASE_URL"] = "sqlite:///./test_sqlite.db"
-    if to_phone is None:
-        os.environ.pop("TO_PHONE_NUMBER", None)
-    else:
-        os.environ["TO_PHONE_NUMBER"] = to_phone
+    # Create a unique temp DB file (avoids stale/readonly file collisions in CI).
+    import tempfile
 
-    # Remove any previous test DB and create tables before importing the app so
-    # the SQLAlchemy metadata is present and tables exist on the engine the app
-    # will use. Avoid reloading modules to keep SQLAlchemy metadata stable.
-    # use an absolute, temp directory-backed sqlite file to avoid
-    # relative-path permission issues in CI or container environments
-    db_path = "/tmp/auragate_test.db"
-    try:
-        os.remove(db_path)
-    except Exception:
-        pass
+    fd, tmp_path = tempfile.mkstemp(prefix="auragate_test_", suffix=".db")
+    os.close(fd)
+    db_path = tmp_path
     os.environ["DATABASE_URL"] = f"sqlite:///{db_path}"
 
     if to_phone is None:
