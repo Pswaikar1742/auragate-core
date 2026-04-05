@@ -40,7 +40,13 @@ STATUS_DENIED = "denied"
 STATUS_ESCALATED_IVR = "escalated_ivr"
 
 DEMO_SOCIETY_NAME = os.getenv("AURAGATE_SOCIETY_NAME", "Prestige Falcon City, Tower 4")
-GUARD_TOTP_SECRET = os.getenv("GUARD_TOTP_SECRET", pyotp.random_base32())
+if pyotp is not None:
+    GUARD_TOTP_SECRET = os.getenv("GUARD_TOTP_SECRET", pyotp.random_base32())
+else:
+    # Fallback secret for test/CI environments where pyotp is not installed
+    import secrets
+
+    GUARD_TOTP_SECRET = os.getenv("GUARD_TOTP_SECRET", secrets.token_hex(16))
 TOTP_INTERVAL_SECONDS = 30
 
 
