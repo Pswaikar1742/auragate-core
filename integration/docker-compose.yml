@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  backend:
+    image: python:3.11-slim
+    container_name: auragate_backend_integration
+    working_dir: /app
+    volumes:
+      - ../backend:/app/backend:rw
+      - ../backend/requirements.txt:/app/requirements.txt:ro
+    environment:
+      IVR_ADAPTER: "noop"
+      TO_PHONE_NUMBER: "+15555550123"
+      DATABASE_URL: "sqlite:////tmp/auragate_integration.db"
+      LOG_LEVEL: "INFO"
+    command: >
+      bash -lc "pip install -r requirements.txt && uvicorn backend.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 5s
+      retries: 12
+
+  frontend:
+    image: node:18-alpine
+    container_name: auragate_frontend_integration
+    working_dir: /app
+    volumes:
+      - ../frontend:/app:ro
+    environment:
+      NODE_ENV: production
+    command: sh -c "cd /app && npm ci --silent && CI=true npm run build --silent && npm run start --silent"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend

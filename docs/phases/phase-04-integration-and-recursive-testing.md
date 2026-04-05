@@ -26,4 +26,13 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - all test evidence recorded
 
 ## Progress Notes
-- Awaiting dedicated integration execution loops.
+- Integration harness scaffolded and a first local Golden-Thread run completed.
+
+- Evidence:
+	- Added `integration/docker-compose.yml` and `integration/run_golden_thread.py` to the repo.
+	- Local narrow loop (frontend build/lint/smoke + backend pytest) passed.
+	- Local integration run executed against a local `uvicorn` backend with `IVR_ADAPTER=noop` and produced a successful full-cycle trace; see `docs/STATE_LOG.md` entry for 2026-04-06 (Cycle 14) for exact commands and outputs.
+
+**Next actions:**
+- Add a gated CI job to run the integration harness (or start backend in CI) and ensure `IVR_ADAPTER=noop` in CI.
+- Commit and open PR with run evidence and CI plan; iterate on CI failures if any.

@@ -306,3 +306,59 @@ ilio
   - None; local builds/tests passed. Await CI results on PR #2 for platform verification.
 - Next Step:
   - Wait for PR #2 CI to finish; address any CI feedback. After merge, proceed to Phase 04 (Integration & Recursive Testing).
+
+## 2026-04-06 (Cycle 13)
+- Date: 2026-04-06
+- Phase: 03 Frontend Golden Thread UI — CI Fixes
+- Prompt Summary: Fix frontend lint errors preventing CI green; ensure frontend smoke-check and backend smoke tests pass locally; push fixes to PR branch.
+- Changes Made:
+  - Updated: `frontend/app/guard/page.tsx` — wired countdown controls and a `Simulate Now` button into the UI so previously-unused handlers are exercised (resolves ESLint unused-vars errors).
+  - Committed and pushed fix to branch `feat/phase-03-golden-thread` (updated PR #2).
+- Tests/Checks Run:
+  - Frontend lint: `cd frontend && npm run lint` — ✔ No ESLint warnings or errors
+  - Frontend smoke check: `cd frontend && npm run smoke` — ✔ Smoke check passed (found `/api/health` in build output or source)
+  - Backend smoke tests: `pytest -q /home/psw/Projects/auragate-core/backend/tests/test_escalate.py` — 2 passed
+- Results:
+  - Local CI-equivalent checks are green for Phase 02 and Phase 03 artifacts.
+  - PR #2 updated with lint fix; awaiting GitHub Actions run for final platform verification.
+- Blockers:
+  - None local; waiting for remote CI results on PR #2.
+- Next Step:
+  1. Monitor PR #2 CI; if CI shows failures, fix and iterate.
+  2. After merge, begin Phase‑04 integration loops (create `feat/phase-04-integration`).
+
+## 2026-04-06 (Cycle 14)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing
+- Prompt Summary: Scaffold integration compose and golden-thread runner; run narrow frontend & backend checks; run integration harness against a local backend using NoopAdapter and file-backed SQLite.
+- Changes Made:
+  - Added: `integration/docker-compose.yml`
+  - Added: `integration/run_golden_thread.py`
+- Tests/Checks Run:
+  - Frontend:
+    - `cd frontend && npm ci` — installed packages (392 added); audit warnings noted.
+    - `CI=true npm run build` — produced `.next` build artifacts.
+    - `npm run lint` — ✔ No ESLint warnings or errors
+    - `node ./scripts/smoke-check.js` — Smoke check passed: `/api/health` referenced in build output
+  - Backend:
+    - `source .venv/bin/activate && pytest -q backend/tests/test_escalate.py` — `2 passed, 19 warnings in 0.39s`
+  - Integration harness (local):
+    - Started backend with `IVR_ADAPTER=noop` and `DATABASE_URL=sqlite:////tmp/auragate_integration.db` on port `8001` using the project venv and `uvicorn`.
+    - Ran `GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py` which produced the following (trimmed):
+
+```
+backend healthy
+TOTP endpoint: 200 {...}
+WS => {"event":"connected","flat_number":"T4-401"}
+WS => {"event":"visitor_checked_in","visitor":{..."status":"pending"...}}
+Check-in created visitor_id: <uuid>
+Triggering escalate via API
+WS => {"event":"visitor_escalated","visitor":{..."status":"escalated_ivr"...}}
+Golden-thread integration run succeeded
+```
+
+- Results: Full Golden-Thread harness completed successfully locally using the Noop IVR adapter; frontend build/lint/smoke and backend smoke tests passed in the recursive narrow loop.
+- Blockers: None encountered for local verification. (Docker compose file added for future CI/container runs but was not executed here.)
+- Next Step:
+  1. Add a gated CI workflow to execute the integration harness (or start the backend in CI), ensuring `IVR_ADAPTER=noop` and file-backed SQLite in CI workspace.
+  2. Commit, push branch `feat/phase-04-integration`, open PR with run evidence and CI plan.
