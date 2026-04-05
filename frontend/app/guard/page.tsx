@@ -265,6 +265,39 @@ export default function GuardPage() {
           </button>
         </form>
 
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => startCountdown(15)}
+            className="rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-white hover:border-neon-green"
+          >
+            Start 15s Countdown
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              void performCheckIn();
+            }}
+            className="rounded-md border border-neon-green bg-transparent px-3 py-2 text-sm font-semibold text-neon-green hover:bg-neon-green hover:text-slate-950"
+          >
+            Simulate Now
+          </button>
+
+          {countdown !== null && (
+            <>
+              <button
+                type="button"
+                onClick={cancelCountdown}
+                className="rounded-md border border-rose-500 bg-transparent px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10"
+              >
+                Cancel
+              </button>
+              <span className="ml-2 font-mono text-sm font-semibold text-neon-green">{countdown}s</span>
+            </>
+          )}
+        </div>
+
         {statusText && (
           <p className="mt-4 rounded-lg border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-200">{statusText}</p>
         )}
