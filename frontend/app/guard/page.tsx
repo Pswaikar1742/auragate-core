@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
 const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
@@ -35,6 +35,8 @@ export default function GuardPage() {
   const [loadingTotp, setLoadingTotp] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<number | null>(null);
 
   // Polling keeps OTP metadata fresh so the guard sees live validity windows.
   useEffect(() => {
@@ -65,6 +67,10 @@ export default function GuardPage() {
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
+      if (countdownRef.current) {
+        window.clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
     };
   }, []);
 
@@ -81,10 +87,15 @@ export default function GuardPage() {
     });
   }, [totp]);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const performCheckIn = async () => {
     setSubmitting(true);
     setStatusText("");
+
+    if (!visitorName || visitorName.trim().length === 0) {
+      setStatusText("Visitor name is required for check-in.");
+      setSubmitting(false);
+      return;
+    }
 
     try {
       const response = await fetch(`${BACKEND_URL}/api/visitors/check-in`, {
@@ -109,10 +120,61 @@ export default function GuardPage() {
       const payload = (await response.json()) as VisitorResponse;
       setStatusText(`${payload.message} Visitor ID: ${payload.visitor.id}`);
       setVisitorName("");
+
+      // clear any running countdown
+      if (countdownRef.current) {
+        window.clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+      setCountdown(null);
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "Unexpected check-in error.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    await performCheckIn();
+  };
+
+  const startCountdown = (seconds = 15) => {
+    if (!visitorName || visitorName.trim().length === 0) {
+      setStatusText("Enter a visitor name before starting the countdown.");
+      return;
+    }
+
+    if (countdownRef.current) {
+      // already running
+      return;
+    }
+
+    setCountdown(seconds);
+    const id = window.setInterval(() => {
+      setCountdown((c) => {
+        if (c === null) return null;
+        if (c <= 1) {
+          if (countdownRef.current) {
+            window.clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          // auto-checkin when countdown ends
+          void performCheckIn();
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    countdownRef.current = id as unknown as number;
+  };
+
+  const cancelCountdown = () => {
+    if (countdownRef.current) {
+      window.clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
+      setStatusText("Countdown cancelled.");
     }
   };
 
