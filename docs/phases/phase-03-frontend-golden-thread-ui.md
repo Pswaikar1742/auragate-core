@@ -31,3 +31,4 @@ Implement the AuraGate PoC dashboard flow from visitor simulation to escalation 
 - Added `/guard` page with dynamic QR, check-in form, and response handling.
 - Added `/resident/[flatNumber]` page with WebSocket connection and approve workflow.
 - Root page now acts as route hub for Guard and Resident simulation paths.
+ - Updated CI to build and lint frontend on PRs; branch `feat/phase-03-golden-thread` created and PR opened (PR #2).
