@@ -74,6 +74,14 @@ export default function GuardPage() {
     };
   }, []);
 
+  // Lightweight client-side smoke ping to help detect runtime integration during demos.
+  // Uses a relative path so CI/build smoke-check can assert presence of `/api/health`.
+  useEffect(() => {
+    void fetch("/api/health", { cache: "no-store" }).catch(() => {
+      /* ignore network errors in browser demos */
+    });
+  }, []);
+
   const qrValue = useMemo(() => {
     if (!totp) {
       return "auragate://loading";

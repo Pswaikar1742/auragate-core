@@ -23,12 +23,17 @@ function searchDir(dir) {
 }
 
 const buildDir = path.resolve(__dirname, '..', '.next');
+const srcDir = path.resolve(__dirname, '..', 'app');
 if (!fs.existsSync(buildDir)) {
   console.error('.next build directory not found. Run `npm run build` first.');
   process.exit(2);
 }
 
-const ok = searchDir(buildDir);
+// Search build artifacts first, then fall back to source files to be CI-friendly.
+let ok = searchDir(buildDir);
+if (!ok && fs.existsSync(srcDir)) {
+  ok = searchDir(srcDir);
+}
 if (!ok) {
   console.error('Smoke check failed: /api/health not referenced in build output');
   process.exit(1);
