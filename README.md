@@ -7,6 +7,24 @@
 
 ---
 
+## 📘 Execution Protocol (Docs-First)
+All implementation must follow the repository docs protocol before coding.
+
+**Read order for every prompt cycle:**
+1. `docs/SYSTEM_INSTRUCTIONS.md`
+2. `docs/README.md`
+3. `plan.md`
+4. `docs/phases/README.md`
+5. Active phase file
+6. `docs/STATE_LOG.md`
+7. `docs/API_CONTRACT.md` and `docs/AURAGATE_CONTEXT.md` as needed
+
+For full process details, see:
+- `docs/WORKFLOW_PROTOCOL.md`
+- `docs/PROMPT_PROTOCOL.md`
+
+---
+
 ## 🎯 The Core Problem
 Traditional gate security apps fail in three key areas of Indian ground reality:
 1.  **Friction & Speed:** Forcing gig workers into slow, humiliating AI scans causes massive gate traffic jams and frustrates delivery partners.
@@ -47,6 +65,37 @@ Our immediate focus is on developing a **Proof of Concept (PoC)** for the Round 
 The PoC will demonstrate our most critical user-facing feature: the **Omni-Channel Escalation**.
 *   **Objective:** To showcase a live demo where a simulated visitor triggers a notification, a 15-second timer runs out, and a **Twilio-powered IVR call** is successfully made to a physical phone, bypassing its "Do Not Disturb" mode.
 *   **Status:** In Progress.
+
+### Local Quickstart: Escalation smoke test
+
+Use these steps to run a minimal local smoke test for the escalation endpoint.
+
+1. Start a local Postgres instance (docker required):
+
+```bash
+docker compose up -d postgres
+```
+
+2. Activate the Python virtualenv and run the backend:
+
+```bash
+source .venv/bin/activate
+uvicorn backend.main:app --reload --host 0.0.0.0 --port 8001
+```
+
+3. Run a smoke POST to `/api/escalate`:
+
+```bash
+curl -sS -X POST -H "Content-Type: application/json" \
+    -d '{"flat_number":"T4-401","visitor_type":"Delivery"}' \
+    http://localhost:8001/api/escalate
+```
+
+Expected outcomes:
+- If `TO_PHONE_NUMBER` (or a resident phone) is not configured, the endpoint returns `400` with a JSON payload: `{ "detail": "No phone number configured for resident or fallback" }`.
+- If `TO_PHONE_NUMBER` and Twilio credentials are configured, the endpoint attempts to place an IVR call and returns `{ "success": true, "message": "IVR Call Triggered to Resident" }` on success (or a failure message if Twilio errors).
+
+Environment variables: see `.env.example` for the full list. Set `TO_PHONE_NUMBER` to a reachable phone in E.164 format (e.g. `+919876543210`) to test call routing.
 
 ### Future Scope
 *   **Phase 1:** Full Bhashini API and Neo4j integration.
