@@ -71,20 +71,19 @@ jobs:
           mkdir -p integration
           echo "Running Golden Thread harness..."
           GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py 2>&1 | tee integration/run_result.log
-
-        - name: Collect debug artifacts (always)
-          if: always()
-          run: |
-            mkdir -p integration
-            echo "=== Integration run debug ===" >> integration/run_result.log
-            echo "Run time: $(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> integration/run_result.log
-            echo "Environment:" >> integration/run_result.log
-            env >> integration/run_result.log
-            echo "\nRepository files (top-level):" >> integration/run_result.log
-            ls -la >> integration/run_result.log
-            if [ ! -f integration/last_run.json ]; then
-              echo '{"exit_code":1,"notes":["CI run failed before harness produced trace"]}' > integration/last_run.json
-            fi
+      - name: Collect debug artifacts (always)
+        if: always()
+        run: |
+          mkdir -p integration
+          echo "=== Integration run debug ===" >> integration/run_result.log
+          echo "Run time: $(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> integration/run_result.log
+          echo "Environment:" >> integration/run_result.log
+          env >> integration/run_result.log
+          echo "\nRepository files (top-level):" >> integration/run_result.log
+          ls -la >> integration/run_result.log
+          if [ ! -f integration/last_run.json ]; then
+            echo '{"exit_code":1,"notes":["CI run failed before harness produced trace"]}' > integration/last_run.json
+          fi
 
       - name: Upload integration artifacts
         if: always()
