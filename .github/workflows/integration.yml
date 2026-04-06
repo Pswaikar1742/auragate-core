@@ -11,7 +11,7 @@ jobs:
   integration:
     name: Run integration harness (gated)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-integration'))
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
     env:
       DATABASE_URL: sqlite:////tmp/auragate_integration.db
       IVR_ADAPTER: noop
