@@ -79,6 +79,20 @@ jobs:
             integration/run_result.log
             integration/last_run.json
 
+      - name: Collect debug artifacts (always)
+        if: always()
+        run: |
+          mkdir -p integration
+          echo "=== Integration run debug ===" > integration/run_result.log
+          echo "Run time: $(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> integration/run_result.log
+          echo "Environment:" >> integration/run_result.log
+          env >> integration/run_result.log
+          echo "\nRepository files (top-level):" >> integration/run_result.log
+          ls -la >> integration/run_result.log
+          if [ ! -f integration/last_run.json ]; then
+            echo '{"exit_code":1,"notes":["CI run failed before harness produced trace"]}' > integration/last_run.json
+          fi
+
       - name: Teardown backend
         if: always()
         run: |
