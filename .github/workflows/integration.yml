@@ -8,6 +8,7 @@ jobs:
   integration:
     name: Run integration harness (gated)
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'run-integration'))
     env:
       DATABASE_URL: sqlite:////tmp/auragate_integration.db
       IVR_ADAPTER: noop
@@ -15,21 +16,7 @@ jobs:
       NEXT_PUBLIC_WS_BASE_URL: http://127.0.0.1:8001
 
     steps:
-      - name: Check whether to run harness
-        uses: actions/github-script@v6
-        id: check
-        with:
-          script: |
-            const eventName = github.context.eventName;
-            if (eventName === 'workflow_dispatch') return { run: 'true' };
-            if (eventName === 'pull_request') {
-              const pr = github.context.payload.pull_request;
-              if (!pr) return { run: 'false' };
-              const labels = pr.labels.map(l => l.name);
-              if (labels.includes('run-integration')) return { run: 'true' };
-            }
-            return { run: 'false' };
-
+      # Job gated: only runs on manual dispatch or when PR has `run-integration` label.
       - name: Checkout code
         uses: actions/checkout@v4
         if: steps.check.outputs.run == 'true'
