@@ -362,3 +362,43 @@ Golden-thread integration run succeeded
 - Next Step:
   1. Add a gated CI workflow to execute the integration harness (or start the backend in CI), ensuring `IVR_ADAPTER=noop` and file-backed SQLite in CI workspace.
   2. Commit, push branch `feat/phase-04-integration`, open PR with run evidence and CI plan.
+
+---
+
+## 2026-04-06 (Cycle 15)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing
+- Prompt Summary: Add gated CI integration workflow and enhance the Golden-Thread runner to emit a compact JSON trace (`integration/last_run.json`). Commit files to `feat/phase-04-integration` and provide reproduction steps.
+- Changes Made:
+  - Added: `.github/workflows/integration.yml` (gated: `workflow_dispatch` OR PR label `run-integration`).
+  - Updated: `integration/run_golden_thread.py` to write `integration/last_run.json` (events, HTTP responses, timestamps, `exit_code`).
+- Tests/Checks Run:
+  - Automated local execution blocked in this environment (package install / runtime was not executed here). See "Repro commands" below to run locally.
+- Results:
+  - CI workflow and runner changes added in the working tree. `integration/run_golden_thread.py` now saves a JSON trace at `integration/last_run.json` for every run (success or failure).
+  - A prior local full-cycle Golden-Thread run exists in an earlier entry (2026-04-06 Cycle 14) showing a successful harness execution against `uvicorn` with `IVR_ADAPTER=noop`.
+- Blockers:
+  - This execution environment was unable to run `pip install` and start the backend (see run attempt logs). Please run the narrow loop and integration harness locally or let CI execute the workflow via `workflow_dispatch` or PR label `run-integration`.
+- Next Step:
+  1. Commit and push the changes on branch `feat/phase-04-integration` and open/update PR #3 with this run evidence and the CI workflow description.
+  2. Trigger the workflow using the `workflow_dispatch` UI or add the `run-integration` label to the PR to run the harness in GitHub Actions.
+
+Repro commands (local):
+
+```bash
+# Backend: install deps and run tests
+python -m pip install --upgrade pip
+pip install -r backend/requirements.txt
+pytest -q backend/tests/test_escalate.py
+
+# Start backend (avoid port collisions)
+IVR_ADAPTER=noop DATABASE_URL=sqlite:////tmp/auragate_integration.db python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
+
+# Run harness
+GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py
+
+# Inspect trace
+cat integration/last_run.json
+```
+
+If CI run is preferred: push branch and trigger via `workflow_dispatch` or label the PR `run-integration` to run the guarded harness job in GitHub Actions.

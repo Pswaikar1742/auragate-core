@@ -35,4 +35,6 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 
 **Next actions:**
 - Add a gated CI job to run the integration harness (or start backend in CI) and ensure `IVR_ADAPTER=noop` in CI.
+ - Added a gated CI workflow at `.github/workflows/integration.yml` (runs on `workflow_dispatch` or when PR labeled `run-integration`).
+ - Enhanced `integration/run_golden_thread.py` to emit `integration/last_run.json` (compact JSON trace) for CI evidence capture.
 - Commit and open PR with run evidence and CI plan; iterate on CI failures if any.
