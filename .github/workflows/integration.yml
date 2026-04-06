@@ -19,28 +19,23 @@ jobs:
       # Job gated: only runs on manual dispatch or when PR has `run-integration` label.
       - name: Checkout code
         uses: actions/checkout@v4
-        if: steps.check.outputs.run == 'true'
 
       - name: Setup Python 3.11
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
-        if: steps.check.outputs.run == 'true'
 
       - name: Setup Node 20
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-        if: steps.check.outputs.run == 'true'
 
       - name: Install backend requirements
-        if: steps.check.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
       - name: Frontend: npm ci, build, lint, smoke
-        if: steps.check.outputs.run == 'true'
         working-directory: frontend
         run: |
           npm ci
@@ -49,19 +44,16 @@ jobs:
           npm run smoke
 
       - name: Run backend tests
-        if: steps.check.outputs.run == 'true'
         run: |
           pytest -q backend/tests/test_escalate.py
 
       - name: Start backend (uvicorn)
-        if: steps.check.outputs.run == 'true'
         run: |
           set -o pipefail
           python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 &
           echo $! > /tmp/backend_pid
 
       - name: Wait for /health
-        if: steps.check.outputs.run == 'true'
         run: |
           for i in $(seq 1 30); do
             if curl -sfS http://127.0.0.1:8001/health >/dev/null 2>&1; then
@@ -74,7 +66,6 @@ jobs:
           exit 1
 
       - name: Run integration harness
-        if: steps.check.outputs.run == 'true'
         run: |
           set -o pipefail
           GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py > integration/run_result.log 2>&1
