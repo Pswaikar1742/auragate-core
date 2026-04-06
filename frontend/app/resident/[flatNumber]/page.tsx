@@ -3,8 +3,8 @@
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-const WS_BASE_URL = (process.env.NEXT_PUBLIC_WS_BASE_URL ?? BACKEND_URL).replace(/^http/, "ws");
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
+const WS_BASE_ENV = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "";
 
 type VisitorPayload = {
   id: string;
@@ -30,10 +30,11 @@ export default function ResidentPage() {
   const [statusText, setStatusText] = useState("Waiting for gate events...");
   const [approving, setApproving] = useState(false);
 
-  const wsUrl = useMemo(
-    () => `${WS_BASE_URL}/ws/resident/${encodeURIComponent(flatNumber)}`,
-    [flatNumber],
-  );
+  const wsUrl = useMemo(() => {
+    const base = WS_BASE_ENV || BACKEND_URL || (typeof window !== "undefined" ? window.location.origin : "");
+    const wsBase = base.replace(/^http/, "ws");
+    return `${wsBase}/ws/resident/${encodeURIComponent(flatNumber)}`;
+  }, [flatNumber]);
 
   useEffect(() => {
     if (!flatNumber) {
@@ -108,9 +109,8 @@ export default function ResidentPage() {
 
     setApproving(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/visitors/${currentVisitor.id}/approve`, {
-        method: "PUT",
-      });
+      const apiPath = BACKEND_URL ? `${BACKEND_URL}/api/visitors/${currentVisitor.id}/approve` : `/api/visitors/${currentVisitor.id}/approve`;
+      const response = await fetch(apiPath, { method: "PUT" });
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));

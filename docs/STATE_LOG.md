@@ -402,3 +402,52 @@ cat integration/last_run.json
 ```
 
 If CI run is preferred: push branch and trigger via `workflow_dispatch` or label the PR `run-integration` to run the guarded harness job in GitHub Actions.
+
+---
+
+## 2026-04-06 (Cycle 16)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing — Local verification
+- Prompt Summary: Executed the integration harness locally against a seeded backend (Noop IVR adapter). Captured `integration/last_run.json` and confirmed a clean full-cycle run.
+- Changes Made:
+  - Verified: `integration/run_golden_thread.py` writes `integration/last_run.json` (trace + exit_code).
+- Tests/Checks Run (commands executed):
+
+```
+# Install backend deps into project venv
+/home/psw/Projects/auragate-core/.venv/bin/python -m pip install -r backend/requirements.txt
+
+# Backend smoke tests
+/home/psw/Projects/auragate-core/.venv/bin/python -m pytest -q backend/tests/test_escalate.py
+
+# Start backend (seed demo resident via TO_PHONE_NUMBER)
+IVR_ADAPTER=noop DATABASE_URL=sqlite:////tmp/auragate_integration.db TO_PHONE_NUMBER=+15555550123 /home/psw/Projects/auragate-core/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 &
+
+# Run harness
+GOLDEN_THREAD_BASE=http://127.0.0.1:8001 /home/psw/Projects/auragate-core/.venv/bin/python integration/run_golden_thread.py
+
+# Inspect trace
+cat integration/last_run.json
+```
+
+- Results (extracted `integration/last_run.json`):
+
+```json
+{
+  "start_time": "2026-04-06T10:07:47.877328Z",
+  "base": "http://127.0.0.1:8001",
+  "flat": "T4-401",
+  "http": [ ... ],
+  "ws_messages": [ ... ],
+  "notes": [ "Golden-thread integration run succeeded" ],
+  "exit_code": 0,
+  "finished_at": "2026-04-06T10:07:47.934323Z"
+}
+```
+
+- Notes:
+  - The harness completed successfully (exit_code `0`). The full trace is available at `integration/last_run.json` and was written during the run.
+  - CI workflow `.github/workflows/integration.yml` will upload `integration/last_run.json` as an artifact when executed in GitHub Actions.
+
+Next Step:
+  - Trigger the CI workflow (Actions UI) or add label `run-integration` to PR #3 to run the harness in GitHub Actions and collect artifacts.

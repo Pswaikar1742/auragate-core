@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "";
 const FLAT_OPTIONS = ["T4-401", "T4-402"];
 const VISITOR_TYPES = ["Delivery", "Maid", "Guest"];
 
@@ -44,7 +44,8 @@ export default function GuardPage() {
 
     const loadTotp = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/guard/totp`, { cache: "no-store" });
+        const apiPath = BACKEND_URL ? `${BACKEND_URL}/api/guard/totp` : `/api/guard/totp`;
+        const response = await fetch(apiPath, { cache: "no-store" });
         if (!response.ok) {
           throw new Error("Unable to load guard QR payload.");
         }
@@ -77,6 +78,10 @@ export default function GuardPage() {
   // Lightweight client-side smoke ping to help detect runtime integration during demos.
   // Uses a relative path so CI/build smoke-check can assert presence of `/api/health`.
   useEffect(() => {
+    // relative path used intentionally so CI/build smoke-check can assert presence
+    // of `/api/health` in build output. When running the frontend server with
+    // a separate backend, set `NEXT_PUBLIC_BACKEND_URL` so other API calls
+    // target the backend host directly.
     void fetch("/api/health", { cache: "no-store" }).catch(() => {
       /* ignore network errors in browser demos */
     });
@@ -106,7 +111,8 @@ export default function GuardPage() {
     }
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/visitors/check-in`, {
+      const apiPath = BACKEND_URL ? `${BACKEND_URL}/api/visitors/check-in` : `/api/visitors/check-in`;
+      const response = await fetch(apiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
