@@ -40,6 +40,7 @@ At the end of every prompt cycle, update at minimum:
 - `docs/PROMPT_PROTOCOL.md`: prompt-level start/resume/end checklists.
 - `docs/STATE_LOG.md`: chronological execution memory.
 - `docs/IMPLEMENTATION_STATUS.md`: implemented vs pending feature/workflow matrix.
+- `docs/DEMO_RUNBOOK.md`: clean-machine startup and demo verification checklist.
 - `docs/phases/`: phase playbooks and acceptance gates.
 - `docs/API_CONTRACT.md`: API definitions and examples.
 - `docs/AURAGATE_CONTEXT.md`: product and architecture context.

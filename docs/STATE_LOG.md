@@ -525,3 +525,77 @@ Next Step:
 - Next Step:
   1. Mark Phase-04 closed in progress tracking and continue with Phase-05 hardening tasks.
   2. Keep `run-integration` label workflow path for targeted integration runs in future PRs.
+
+---
+
+## 2026-04-07 (Cycle 19)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing — pre-Phase-05 validation sweep
+- Prompt Summary: Run thorough non-trivial testing across backend, frontend, integration harness, and live browser interactions before starting Phase 05.
+- Changes Made:
+  - No functional code changes in this cycle; executed validation and recorded evidence.
+- Tests/Checks Run:
+  - Backend automated tests:
+    - `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend quality checks:
+    - `npm --prefix frontend run lint` -> pass.
+    - `CI=true npm --prefix frontend run build` -> pass (Next.js production build completed).
+    - `npm --prefix frontend run smoke` -> pass (`/api/health` reference found).
+  - Live integration harness:
+    - Started backend on `127.0.0.1:8001` with `IVR_ADAPTER=noop`, SQLite file DB, and fallback phone.
+    - Ran `integration/run_golden_thread.py` against live backend -> success; `integration/last_run.json` recorded `exit_code: 0` with expected `visitor_checked_in` and `visitor_escalated` events.
+  - Browser-level manual test (real UI interactions):
+    - Resident page connected via WebSocket.
+    - Guard page performed real check-in (`Simulate Now`) with visitor name.
+    - Resident received live visitor alert and approved successfully; backend logs confirmed approval and skipped escalation for that visitor.
+  - Runtime negative-path API checks (live server, no fallback phone):
+    - `POST /api/escalate` -> `400` with `No phone number configured for resident or fallback`.
+    - `POST /api/visitors/check-in` with unknown flat -> `404` with `No resident found for flat NO-FLAT`.
+  - Diagnostics:
+    - `get_errors` returned no workspace errors.
+- Results:
+  - Testing confidence for the current MVP Golden Thread is strong across automated, integration, and manual browser flows.
+  - No blocking defects found for Phase-05 entry.
+- Blockers:
+  - None identified during this validation sweep.
+- Next Step:
+  1. Begin Phase-05 hardening tasks (runbook, fallback UX, env/secret validation).
+  2. Keep this validation evidence as baseline before adding new Phase-05 changes.
+
+---
+
+## 2026-04-07 (Cycle 20)
+- Date: 2026-04-07
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Update docs and start Phase-05 implementation with concrete hardening work: demo runbook plus improved runtime fallback/error messaging.
+- Changes Made:
+  - Added: `docs/DEMO_RUNBOOK.md` (clean-machine startup, demo checklist, negative-path validation steps, secret-hygiene guidance).
+  - Updated: `frontend/app/guard/page.tsx`:
+    - dynamic backend resolution with local fallback
+    - clearer QR/check-in backend-unreachable messages
+    - backend-target display for demo debugging
+  - Updated: `frontend/app/resident/[flatNumber]/page.tsx`:
+    - dynamic backend + websocket resolution
+    - clearer socket-disconnect/error messaging with channel target
+    - backend-target display
+  - Added: `frontend/lib/runtimeConfig.ts` for shared runtime backend/ws resolution helpers.
+  - Updated: `docs/README.md` to index `docs/DEMO_RUNBOOK.md`.
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` progress notes and task status.
+- Tests/Checks Run:
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks:
+    - `npm --prefix frontend run lint` -> pass.
+    - `NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8001 NEXT_PUBLIC_WS_BASE_URL=http://127.0.0.1:8001 CI=true npm --prefix frontend run build` -> pass.
+    - `npm --prefix frontend run smoke` -> pass.
+  - Browser validation (live):
+    - Resident connected via WebSocket and received visitor alert after guard check-in.
+    - Resident approval path succeeded.
+    - Backend-down validation: guard showed actionable backend-unreachable message; resident displayed disconnected websocket channel target.
+- Results:
+  - Phase-05 is actively in progress with first hardening increment completed and validated.
+  - Demo startup/verification path is now documented and reproducible.
+- Blockers:
+  - None in this increment.
+- Next Step:
+  1. Continue Phase-05 final UI messaging polish and UX refinements.
+  2. Add any remaining demo-readiness checks from runbook into repeatable routine before Phase-05 closeout.

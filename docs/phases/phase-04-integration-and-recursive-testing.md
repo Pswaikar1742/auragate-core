@@ -35,6 +35,7 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 	- `integration/run_golden_thread.py` emits `integration/last_run.json` with `exit_code` and detailed trace.
 	- Local recursive checks passed: backend pytest, frontend lint/smoke, and full golden-thread run against local `uvicorn`.
 	- GitHub Actions integration run completed successfully on PR #3 via `workflow_dispatch`: run `24067695729`, artifacts uploaded as `integration-run-artifacts`.
+	- Additional pre-Phase-05 validation sweep passed: live browser guard/resident flow (check-in -> alert -> approve), plus negative-path API checks for missing phone (`400`) and unknown flat (`404`).
 
 **Phase 04 status:**
 - Exit criteria satisfied for current MVP Golden Thread.
