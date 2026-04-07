@@ -1,0 +1,114 @@
+name: Integration Harness
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
+
+jobs:
+  integration:
+    name: Run integration harness (gated)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-integration')
+    env:
+      DATABASE_URL: sqlite:////tmp/auragate_integration.db
+      IVR_ADAPTER: noop
+      NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:8001
+      NEXT_PUBLIC_WS_BASE_URL: http://127.0.0.1:8001
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install backend requirements
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+
+      - name: Frontend: npm ci, build, lint, smoke
+        working-directory: frontend
+        run: |
+          npm ci
+          CI=true npm run build
+          npm run lint
+          if npm run | grep -q " smoke"; then
+            npm run smoke
+          else
+            echo "No smoke script found; skipping smoke step."
+          fi
+
+      - name: Run backend tests
+        run: |
+          pytest -q backend/tests/test_escalate.py
+
+      - name: Start backend (uvicorn)
+        run: |
+          set -o pipefail
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 &
+          echo $! > /tmp/backend_pid
+
+      - name: Wait for /health
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sfS http://127.0.0.1:8001/health >/dev/null 2>&1; then
+              echo "backend healthy"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "backend did not become healthy" >&2
+          exit 1
+
+      - name: Run integration harness
+        run: |
+          set -o pipefail
+          mkdir -p integration
+          if [ ! -f integration/run_golden_thread.py ]; then
+            echo "integration/run_golden_thread.py not found in this branch" >&2
+            exit 1
+          fi
+          echo "Running Golden Thread harness..."
+          GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py 2>&1 | tee integration/run_result.log
+
+      - name: Collect debug artifacts (always)
+        if: always()
+        run: |
+          mkdir -p integration
+          if [ ! -f integration/run_result.log ]; then
+            echo "Harness did not emit run_result.log" > integration/run_result.log
+          fi
+          echo "=== Integration run debug ===" >> integration/run_result.log
+          echo "Run time: $(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> integration/run_result.log
+          echo "Environment:" >> integration/run_result.log
+          env >> integration/run_result.log
+          echo "\nRepository files (top-level):" >> integration/run_result.log
+          ls -la >> integration/run_result.log
+          if [ ! -f integration/last_run.json ]; then
+            echo '{"exit_code":1,"notes":["CI run failed before harness produced trace"]}' > integration/last_run.json
+          fi
+
+      - name: Upload integration artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-run-artifacts
+          path: |
+            integration/run_result.log
+            integration/last_run.json
+
+      - name: Teardown backend
+        if: always()
+        run: |
+          if [ -f /tmp/backend_pid ]; then
+            kill "$(cat /tmp/backend_pid)" || true
+          fi
