@@ -31,13 +31,13 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - Evidence:
 	- Added `integration/docker-compose.yml` and `integration/run_golden_thread.py`.
 	- Added `.github/workflows/integration.yml` for gated integration harness execution.
-	- `integration/run_golden_thread.py` now emits `integration/last_run.json` with `exit_code` and detailed trace.
+	- Fixed workflow bootstrap path on `main` via workflow-only PR + YAML hotfix PR.
+	- `integration/run_golden_thread.py` emits `integration/last_run.json` with `exit_code` and detailed trace.
 	- Local recursive checks passed: backend pytest, frontend lint/smoke, and full golden-thread run against local `uvicorn`.
+	- GitHub Actions integration run completed successfully on PR #3 via `workflow_dispatch`: run `24067695729`, artifacts uploaded as `integration-run-artifacts`.
 
-**Open blocker before formal phase close:**
-- The integration workflow file does not yet exist on `origin/main`, so GitHub Actions cannot execute it fully from this feature branch. CI artifact evidence (`integration/run_result.log`, `integration/last_run.json`) on Actions remains pending until workflow is merged to main (or merged via a workflow-only PR).
+**Phase 04 status:**
+- Exit criteria satisfied for current MVP Golden Thread.
 
 **Next actions:**
-- Merge integration workflow into `main` (or workflow-only PR).
-- Trigger integration workflow from Actions and archive artifacts.
-- Mark Phase 04 exit criteria complete after CI artifact evidence is recorded.
+- Move execution focus to Phase 05 hardening and demo readiness increments.

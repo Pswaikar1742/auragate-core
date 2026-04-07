@@ -28,6 +28,7 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 ## Progress Notes
 - Kickoff started with a requirements-vs-code gap assessment using the provided PDF blueprints.
 - Current MVP is working for the Golden Thread (guard check-in -> resident WebSocket -> escalation API -> IVR adapter trigger) with local integration evidence.
+- Phase-04 CI unblock completed: integration workflow is on `main` and a successful GitHub Actions integration run with artifacts was captured (`run 24067695729`).
 - Major hardening/demo items still pending:
 	- clean demo runbook for a fresh machine
 	- explicit fallback/error UX for backend-unavailable and env-missing scenarios

@@ -500,3 +500,28 @@ Next Step:
 - Next Step:
   1. Merge workflow into `main` (or workflow-only PR) and capture integration artifacts in Actions.
   2. Execute Phase-05 hardening tasks in order: demo runbook, env/secret validation, fallback/error-path UX, then broader feature closure.
+
+---
+
+## 2026-04-07 (Cycle 18)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing — CI unblock and closure
+- Prompt Summary: Unblock Phase-04 CI closure by getting integration workflow onto `main`, fixing workflow syntax, and validating an executable integration run with artifacts.
+- Changes Made:
+  - Created and merged workflow-only PR `#4` to add `.github/workflows/integration.yml` on `main`.
+  - Detected workflow YAML parse failure (unquoted step name with `:`) and merged hotfix PR `#5`.
+  - Synced PR #3 branch workflow with fixed `main` version and added `TO_PHONE_NUMBER` in CI env so demo residents are seeded during harness run.
+  - Triggered integration workflow for PR #3 using `workflow_dispatch`.
+- Tests/Checks Run:
+  - Confirmed workflow present on `origin/main`.
+  - Verified YAML validity locally with PyYAML parser.
+  - GitHub Actions run `24067695729` (`Integration Harness`, branch `feat/phase-04-integration`, event `workflow_dispatch`) completed with `conclusion: success`.
+  - Verified artifact publication: `integration-run-artifacts` (includes `integration/run_result.log` and `integration/last_run.json`).
+- Results:
+  - Phase-04 CI unblock is complete.
+  - Integration harness now executes through GitHub Actions on PR #3 and publishes evidence artifacts.
+- Blockers:
+  - None for Phase-04 CI execution path.
+- Next Step:
+  1. Mark Phase-04 closed in progress tracking and continue with Phase-05 hardening tasks.
+  2. Keep `run-integration` label workflow path for targeted integration runs in future PRs.
