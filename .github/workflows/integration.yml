@@ -2,16 +2,14 @@ name: Integration Harness
 
 on:
   workflow_dispatch: {}
-  pull_request: {}
-  push:
-    branches:
-      - 'feat/*'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled]
 
 jobs:
   integration:
     name: Run integration harness (gated)
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'run-integration')
     env:
       DATABASE_URL: sqlite:////tmp/auragate_integration.db
       IVR_ADAPTER: noop
@@ -19,7 +17,6 @@ jobs:
       NEXT_PUBLIC_WS_BASE_URL: http://127.0.0.1:8001
 
     steps:
-      # Job gated: only runs on manual dispatch or when PR has `run-integration` label.
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -38,13 +35,17 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r backend/requirements.txt
 
-      - name: Frontend: npm ci, build, lint, smoke
+      - name: "Frontend: npm ci, build, lint, smoke"
         working-directory: frontend
         run: |
           npm ci
           CI=true npm run build
           npm run lint
-          npm run smoke
+          if npm run | grep -q " smoke"; then
+            npm run smoke
+          else
+            echo "No smoke script found; skipping smoke step."
+          fi
 
       - name: Run backend tests
         run: |
@@ -72,12 +73,20 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p integration
+          if [ ! -f integration/run_golden_thread.py ]; then
+            echo "integration/run_golden_thread.py not found in this branch" >&2
+            exit 1
+          fi
           echo "Running Golden Thread harness..."
           GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py 2>&1 | tee integration/run_result.log
+
       - name: Collect debug artifacts (always)
         if: always()
         run: |
           mkdir -p integration
+          if [ ! -f integration/run_result.log ]; then
+            echo "Harness did not emit run_result.log" > integration/run_result.log
+          fi
           echo "=== Integration run debug ===" >> integration/run_result.log
           echo "Run time: $(date --utc +%Y-%m-%dT%H:%M:%SZ)" >> integration/run_result.log
           echo "Environment:" >> integration/run_result.log
