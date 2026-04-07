@@ -13,6 +13,7 @@ jobs:
     env:
       DATABASE_URL: sqlite:////tmp/auragate_integration.db
       IVR_ADAPTER: noop
+      TO_PHONE_NUMBER: +10000000000
       NEXT_PUBLIC_BACKEND_URL: http://127.0.0.1:8001
       NEXT_PUBLIC_WS_BASE_URL: http://127.0.0.1:8001
 
