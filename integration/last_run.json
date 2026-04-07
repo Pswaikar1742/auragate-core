@@ -1,65 +1,65 @@
 {
-  "start_time": "2026-04-06T10:07:47.877328Z",
+  "start_time": "2026-04-07T05:53:16.022600Z",
   "base": "http://127.0.0.1:8001",
   "flat": "T4-401",
   "http": [
     {
       "endpoint": "/health",
       "ok": true,
-      "ts": "2026-04-06T10:07:47.913811Z"
+      "ts": "2026-04-07T05:53:16.072473Z"
     },
     {
       "endpoint": "/api/guard/totp",
       "status": 200,
-      "text": "{\"secret\":\"BK4JVVNSUQKVTJYVF3JACD6P5EFXO3B7\",\"otp_auth_uri\":\"otpauth://totp/AuraGate:Prestige%20Falcon%20City%2C%20Tower%204%20Guard%20Device?secret=BK4JVVNSUQKVTJYVF3JACD6P5EFXO3B7&issuer=AuraGate\",\"current_otp\":\"932564\",\"valid_for_seconds\":13,\"interval_seconds\":30}",
-      "ts": "2026-04-06T10:07:47.915508Z"
+      "text": "{\"secret\":\"4YD5UJLSQXDJNC6ZWFEXYLEPBFDAM5CK\",\"otp_auth_uri\":\"otpauth://totp/AuraGate:Prestige%20Falcon%20City%2C%20Tower%204%20Guard%20Device?secret=4YD5UJLSQXDJNC6ZWFEXYLEPBFDAM5CK&issuer=AuraGate\",\"current_otp\":\"140144\",\"valid_for_seconds\":14,\"interval_seconds\":30}",
+      "ts": "2026-04-07T05:53:16.074365Z"
     },
     {
       "endpoint": "/api/visitors/check-in",
       "status": 201,
-      "text": "{\"message\":\"Visitor check-in recorded.\",\"visitor\":{\"id\":\"3763e230-8ce3-43eb-b97c-fb647ac3c336\",\"visitor_name\":\"IntegrationRunner\",\"visitor_type\":\"Delivery\",\"flat_number\":\"T4-401\",\"status\":\"pending\",\"timestamp\":\"2026-04-06T10:07:47.927346\"}}",
-      "ts": "2026-04-06T10:07:47.930146Z"
+      "text": "{\"message\":\"Visitor check-in recorded.\",\"visitor\":{\"id\":\"f196bbf9-0c93-4492-83a1-b1a14f870cef\",\"visitor_name\":\"IntegrationRunner\",\"visitor_type\":\"Delivery\",\"flat_number\":\"T4-401\",\"status\":\"pending\",\"timestamp\":\"2026-04-07T05:53:16.088173\"}}",
+      "ts": "2026-04-07T05:53:16.090835Z"
     },
     {
       "endpoint": "/api/escalate",
       "status": 200,
       "text": "{\"success\":true,\"message\":\"IVR Call Triggered to Resident\"}",
-      "ts": "2026-04-06T10:07:47.933832Z"
+      "ts": "2026-04-07T05:53:16.094418Z"
     }
   ],
   "ws_messages": [
     {
-      "ts": "2026-04-06T10:07:47.924625Z",
+      "ts": "2026-04-07T05:53:16.085224Z",
       "msg": {
         "event": "connected",
         "flat_number": "T4-401"
       }
     },
     {
-      "ts": "2026-04-06T10:07:47.929391Z",
+      "ts": "2026-04-07T05:53:16.090112Z",
       "msg": {
         "event": "visitor_checked_in",
         "visitor": {
-          "id": "3763e230-8ce3-43eb-b97c-fb647ac3c336",
+          "id": "f196bbf9-0c93-4492-83a1-b1a14f870cef",
           "visitor_name": "IntegrationRunner",
           "visitor_type": "Delivery",
           "flat_number": "T4-401",
           "status": "pending",
-          "timestamp": "2026-04-06T10:07:47.927346"
+          "timestamp": "2026-04-07T05:53:16.088173"
         }
       }
     },
     {
-      "ts": "2026-04-06T10:07:47.933176Z",
+      "ts": "2026-04-07T05:53:16.093795Z",
       "msg": {
         "event": "visitor_escalated",
         "visitor": {
-          "id": "ad210740-2922-4efe-9af4-7d5db49d70cc",
+          "id": "486d60df-0a31-40c8-b5c1-caafb7c24b05",
           "visitor_name": "Escalation: Delivery",
           "visitor_type": "Delivery",
           "flat_number": "T4-401",
           "status": "escalated_ivr",
-          "timestamp": "2026-04-06T10:07:47.932159"
+          "timestamp": "2026-04-07T05:53:16.092860"
         }
       }
     }
@@ -68,5 +68,5 @@
     "Golden-thread integration run succeeded"
   ],
   "exit_code": 0,
-  "finished_at": "2026-04-06T10:07:47.934323Z"
+  "finished_at": "2026-04-07T05:53:16.094813Z"
 }

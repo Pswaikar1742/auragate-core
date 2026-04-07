@@ -27,7 +27,9 @@ class TwilioAdapter(IVRAdapter):
     def __init__(self, account_sid: Optional[str] = None, auth_token: Optional[str] = None, from_phone: Optional[str] = None):
         self.account_sid = account_sid or os.getenv("TWILIO_ACCOUNT_SID")
         self.auth_token = auth_token or os.getenv("TWILIO_AUTH_TOKEN")
-        self.from_phone = from_phone or os.getenv("TWILIO_FROM_NUMBER")
+        # Keep backward compatibility with older env var naming while aligning
+        # with the documented `TWILIO_PHONE_NUMBER` key.
+        self.from_phone = from_phone or os.getenv("TWILIO_PHONE_NUMBER") or os.getenv("TWILIO_FROM_NUMBER")
 
     async def trigger_call(self, to_phone: str, twiml: str) -> Dict[str, Any]:
         try:

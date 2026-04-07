@@ -145,6 +145,15 @@ This file defines the current stateful prototype API behavior.
 }
 ```
 
+### Adapter Failure Response
+- Status: 200 OK (request accepted but IVR provider call failed)
+```json
+{
+	"success": false,
+	"message": "Failed to trigger IVR Call"
+}
+```
+
 ### Failure Response
 - Status: 400 Bad Request (e.g., no phone configured)
 ```json

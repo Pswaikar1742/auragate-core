@@ -472,3 +472,31 @@ cat integration/last_run.json
 
 Next Step:
   - Trigger the CI workflow (Actions UI) or add label `run-integration` to PR #3 to run the harness in GitHub Actions and collect artifacts.
+
+---
+
+## 2026-04-07 (Cycle 17)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing (closeout) + 05 Hardening kick-off
+- Prompt Summary: Re-audit project status against code + docs + provided PDF blueprints; validate end-to-end locally; fix integration hardening issues; sync documentation to actual implementation state.
+- Changes Made:
+  - Updated: `backend/main.py` (removed accidental duplicate nested `EscalateRequest` declaration under WebSocket handler).
+  - Updated: `integration/run_golden_thread.py` (replaced deprecated `datetime.utcnow()` usage with timezone-aware UTC timestamps).
+  - Updated: `backend/ivr_adapter.py` (aligned Twilio sender env var with documented `TWILIO_PHONE_NUMBER`, while preserving compatibility with `TWILIO_FROM_NUMBER`).
+  - Updated: `docs/phases/phase-04-integration-and-recursive-testing.md` (task status + CI blocker note).
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` (kickoff notes).
+  - Added: `docs/IMPLEMENTATION_STATUS.md` (feature/workflow matrix from blueprint vs code reality).
+  - Updated: `docs/README.md` (index includes implementation status matrix).
+- Tests/Checks Run:
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks: `npm run lint` and `npm run smoke` -> passed.
+  - Integration harness: started local backend (`IVR_ADAPTER=noop`, SQLite file DB), executed `integration/run_golden_thread.py` -> success with `exit_code: 0` in `integration/last_run.json`.
+  - Git check: confirmed `.github/workflows/integration.yml` is not present on `origin/main` (current CI blocker for workflow execution/artifact capture in Actions).
+- Results:
+  - Golden Thread flow is working end-to-end locally with current frontend/backend/API integration.
+  - Project is not yet "entirely complete" vs full blueprint; advanced flows (multi-flat, liveness, voice-first, scout detection, SOS, RBAC, analytics) remain pending and are now explicitly tracked in `docs/IMPLEMENTATION_STATUS.md`.
+- Blockers:
+  - Integration workflow must be merged into `main` to run cleanly in GitHub Actions and produce CI artifacts for formal Phase-04 closure.
+- Next Step:
+  1. Merge workflow into `main` (or workflow-only PR) and capture integration artifacts in Actions.
+  2. Execute Phase-05 hardening tasks in order: demo runbook, env/secret validation, fallback/error-path UX, then broader feature closure.

@@ -25,7 +25,7 @@ from typing import Any
 
 import httpx
 import websockets
-from datetime import datetime
+from datetime import datetime, timezone
 
 BASE = os.getenv("GOLDEN_THREAD_BASE", "http://localhost:8000")
 WS_BASE = BASE.replace("http", "ws")
@@ -47,9 +47,13 @@ async def wait_for_health(client: httpx.AsyncClient, timeout: int = 30) -> bool:
 TRACE_PATH = os.path.join(os.path.dirname(__file__), "last_run.json")
 
 
+def utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
 def write_trace(trace: dict, exit_code: int) -> None:
     trace["exit_code"] = exit_code
-    trace["finished_at"] = datetime.utcnow().isoformat() + "Z"
+    trace["finished_at"] = utc_now_iso()
     try:
         with open(TRACE_PATH, "w") as fh:
             json.dump(trace, fh, indent=2, ensure_ascii=False)
@@ -60,7 +64,7 @@ def write_trace(trace: dict, exit_code: int) -> None:
 
 async def run() -> int:
     trace: dict = {
-        "start_time": datetime.utcnow().isoformat() + "Z",
+        "start_time": utc_now_iso(),
         "base": BASE,
         "flat": FLAT,
         "http": [],
@@ -70,7 +74,7 @@ async def run() -> int:
 
     async with httpx.AsyncClient(base_url=BASE, timeout=10.0) as client:
         ok = await wait_for_health(client, timeout=30)
-        trace["http"].append({"endpoint": "/health", "ok": ok, "ts": datetime.utcnow().isoformat() + "Z"})
+        trace["http"].append({"endpoint": "/health", "ok": ok, "ts": utc_now_iso()})
         if not ok:
             print("ERROR: backend /health not ready", file=sys.stderr)
             write_trace(trace, 2)
@@ -80,7 +84,7 @@ async def run() -> int:
         # Fetch guard TOTP (sanity)
         try:
             r = await client.get("/api/guard/totp")
-            trace["http"].append({"endpoint": "/api/guard/totp", "status": r.status_code, "text": r.text[:400], "ts": datetime.utcnow().isoformat() + "Z"})
+            trace["http"].append({"endpoint": "/api/guard/totp", "status": r.status_code, "text": r.text[:400], "ts": utc_now_iso()})
             print("TOTP endpoint:", r.status_code, r.text[:200])
         except Exception as exc:
             trace["notes"].append(f"guard/totp failed: {exc}")
@@ -97,10 +101,10 @@ async def run() -> int:
                     try:
                         parsed = json.loads(msg)
                         events.append(parsed)
-                        trace["ws_messages"].append({"ts": datetime.utcnow().isoformat() + "Z", "msg": parsed})
+                        trace["ws_messages"].append({"ts": utc_now_iso(), "msg": parsed})
                     except Exception:
                         events.append({"raw": msg})
-                        trace["ws_messages"].append({"ts": datetime.utcnow().isoformat() + "Z", "raw": msg})
+                        trace["ws_messages"].append({"ts": utc_now_iso(), "raw": msg})
             except Exception as exc:
                 print("WS listener stopped:", exc)
 
@@ -112,7 +116,7 @@ async def run() -> int:
                 payload = {"visitor_name": "IntegrationRunner", "visitor_type": "Delivery", "flat_number": FLAT}
                 print("Posting check-in:", payload)
                 r = await client.post("/api/visitors/check-in", json=payload)
-                trace["http"].append({"endpoint": "/api/visitors/check-in", "status": r.status_code, "text": r.text[:400], "ts": datetime.utcnow().isoformat() + "Z"})
+                trace["http"].append({"endpoint": "/api/visitors/check-in", "status": r.status_code, "text": r.text[:400], "ts": utc_now_iso()})
                 if r.status_code != 201:
                     print("ERROR: check-in failed", r.status_code, r.text, file=sys.stderr)
                     listener.cancel()
@@ -136,7 +140,7 @@ async def run() -> int:
                 # 2) Trigger escalate via API
                 print("Triggering escalate via API")
                 r = await client.post("/api/escalate", json={"flat_number": FLAT, "visitor_type": "Delivery", "status": "timeout"})
-                trace["http"].append({"endpoint": "/api/escalate", "status": r.status_code, "text": r.text[:400], "ts": datetime.utcnow().isoformat() + "Z"})
+                trace["http"].append({"endpoint": "/api/escalate", "status": r.status_code, "text": r.text[:400], "ts": utc_now_iso()})
                 if r.status_code != 200:
                     print("ERROR: escalate API failed", r.status_code, r.text, file=sys.stderr)
                     listener.cancel()

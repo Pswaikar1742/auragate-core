@@ -9,10 +9,10 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - structured recursive test loops and evidence capture
 
 ## Tasks
-- [ ] Execute full Golden Thread scenario repeatedly.
-- [ ] Confirm payload and response schema stability.
-- [ ] Document all failing cases and fixes in state log.
-- [ ] Add/refresh run commands in docs if changed.
+- [x] Execute full Golden Thread scenario repeatedly (local).
+- [x] Confirm payload and response schema stability (local harness + API contract alignment).
+- [x] Document all failing cases and fixes in state log.
+- [x] Add/refresh run commands in docs if changed.
 
 ## Recursive Test Gates
 - run narrow checks on changed area
@@ -26,15 +26,18 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - all test evidence recorded
 
 ## Progress Notes
-- Integration harness scaffolded and a first local Golden-Thread run completed.
+- Integration harness scaffolded and repeatedly validated locally.
 
 - Evidence:
-	- Added `integration/docker-compose.yml` and `integration/run_golden_thread.py` to the repo.
-	- Local narrow loop (frontend build/lint/smoke + backend pytest) passed.
-	- Local integration run executed against a local `uvicorn` backend with `IVR_ADAPTER=noop` and produced a successful full-cycle trace; see `docs/STATE_LOG.md` entry for 2026-04-06 (Cycle 14) for exact commands and outputs.
+	- Added `integration/docker-compose.yml` and `integration/run_golden_thread.py`.
+	- Added `.github/workflows/integration.yml` for gated integration harness execution.
+	- `integration/run_golden_thread.py` now emits `integration/last_run.json` with `exit_code` and detailed trace.
+	- Local recursive checks passed: backend pytest, frontend lint/smoke, and full golden-thread run against local `uvicorn`.
+
+**Open blocker before formal phase close:**
+- The integration workflow file does not yet exist on `origin/main`, so GitHub Actions cannot execute it fully from this feature branch. CI artifact evidence (`integration/run_result.log`, `integration/last_run.json`) on Actions remains pending until workflow is merged to main (or merged via a workflow-only PR).
 
 **Next actions:**
-- Add a gated CI job to run the integration harness (or start backend in CI) and ensure `IVR_ADAPTER=noop` in CI.
- - Added a gated CI workflow at `.github/workflows/integration.yml` (runs on `workflow_dispatch` or when PR labeled `run-integration`).
- - Enhanced `integration/run_golden_thread.py` to emit `integration/last_run.json` (compact JSON trace) for CI evidence capture.
-- Commit and open PR with run evidence and CI plan; iterate on CI failures if any.
+- Merge integration workflow into `main` (or workflow-only PR).
+- Trigger integration workflow from Actions and archive artifacts.
+- Mark Phase 04 exit criteria complete after CI artifact evidence is recorded.

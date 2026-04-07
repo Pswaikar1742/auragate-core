@@ -428,10 +428,6 @@ async def resident_socket(websocket: WebSocket, flat_number: str) -> None:
                 await websocket.send_json({"event": "pong"})
     except WebSocketDisconnect:
         await ws_manager.disconnect(flat_number, websocket)
-    class EscalateRequest(BaseModel):
-        flat_number: str
-        visitor_type: str
-        status: str = "timeout"
 
 
 @app.post("/api/escalate")
