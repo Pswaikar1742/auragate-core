@@ -1,0 +1,3 @@
+# Placeholder file to ensure Vercel recognizes the `public` output directory.
+# This folder is used by Next.js for static assets and by Vercel project settings
+# when an Output Directory of `public` is configured.
