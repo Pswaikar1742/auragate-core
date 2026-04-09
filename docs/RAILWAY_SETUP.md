@@ -81,3 +81,107 @@ Next steps for me
 -----------------
 - If you want, I can attempt to run Railway CLI commands here if you provide a temporary Railway token (not recommended over chat).
 - Otherwise I can prepare a deployment checklist, add CI job to initialize the DB automatically after the addon is created, or wire up a GitHub Action to run `python -m backend.init_db` once the `DATABASE_URL` is present.
+
+Triggering deploy from the repository (merge PR)
+------------------------------------------------
+When the project is connected to Railway with automatic deploys enabled, merging a PR into `main` will trigger a build and deploy. If you prefer to merge from the command line with the GitHub CLI, run:
+
+```bash
+# ensure you are authenticated with `gh`
+gh pr view <PR_NUMBER> --repo <OWNER/REPO> --web
+# Or merge directly from the CLI (this will delete the branch if merged):
+gh pr merge <PR_NUMBER> --repo <OWNER/REPO> --merge --delete-branch
+```
+
+If the PR is reported as conflicting, fetch the latest `main`, merge it into your branch, resolve conflicts, push the branch, then merge the PR. Example sequence (run from your feature branch):
+
+```bash
+git fetch origin
+git merge origin/main
+# Resolve any conflicts, then:
+git add <resolved-files>
+git commit
+git push
+# Then merge the PR via web UI or `gh pr merge` as shown above.
+```
+
+Running the DB initialization remotely
+-------------------------------------
+After provisioning the Postgres add-on in Railway (or setting `DATABASE_URL` to a Supabase connection string), you must initialize the schema and seed demo data once. You can do this in three ways:
+
+- Railway UI "Run" command: open the project, choose "Run a command" and execute:
+
+```bash
+python -m backend.init_db
+```
+
+- Railway CLI (if you're logged in and the project is linked):
+
+```bash
+railway run python -m backend.init_db
+```
+
+- GitHub Actions (recommended for repeatable CI): store `DATABASE_URL` as a repository secret and use the workflow below.
+
+Sample GitHub Action (initialize DB on push to `main` or manual dispatch)
+----------------------------------------------------------------------
+Create `.github/workflows/init-db.yml` with the following content and protect the `DATABASE_URL` as a repository secret (or use organization secrets):
+
+```yaml
+name: Initialize Database
+
+on:
+	workflow_dispatch:
+	push:
+		branches:
+			- main
+
+jobs:
+	init-db:
+		runs-on: ubuntu-latest
+		steps:
+			- uses: actions/checkout@v4
+			- uses: actions/setup-python@v4
+				with:
+					python-version: '3.11'
+			- name: Install backend deps
+				run: |
+					python -m pip install --upgrade pip
+					pip install -r backend/requirements.txt
+			- name: Ensure DATABASE_URL is present
+				run: |
+					if [ -z "${{ secrets.DATABASE_URL }}" ]; then
+						echo "DATABASE_URL secret not set in repository. Aborting." >&2
+						exit 1
+					fi
+			- name: Initialize DB
+				env:
+					DATABASE_URL: ${{ secrets.DATABASE_URL }}
+					AURAGATE_REQUIRE_DB_ON_STARTUP: 'false'
+				run: |
+					python -m backend.init_db
+```
+
+Verifying deployment and health
+-------------------------------
+Once Railway finishes the build/deploy (check your Railway project UI or Deployment logs), verify the API is healthy. Replace `<project-domain>` with the Railway-assigned host for your service (e.g., `auragate-core.up.railway.app`):
+
+```bash
+curl -fsS https://<project-domain>/api/health | jq
+# Expected JSON contains "status": "ok" and "database": "connected"
+```
+
+If you do not know the project domain, use the Railway UI or the CLI (`railway status` / `railway open`) to locate the public URL.
+
+Supabase-specific notes
+-----------------------
+- When using Supabase, prefer the `postgresql://` form of the connection string when possible; our code will rewrite `postgres://` → `postgresql://` automatically but using the canonical scheme avoids ambiguity.
+- Supabase connection pooling: if you expect many concurrent connections, enable Supabase's connection pooling or configure PgBouncer to avoid connection saturation.
+
+Security and post-deploy checklist
+---------------------------------
+- After successful DB init and smoke checks, set `AURAGATE_REQUIRE_DB_ON_STARTUP=true` in Railway to enforce DB availability on restarts.
+- Replace `IVR_ADAPTER=noop` with your production IVR adapter configuration and ensure Twilio credentials (or other provider secrets) are stored securely in Railway variables.
+- Rotate any demo secrets used during seeding.
+
+If you'd like, I can add the `.github/workflows/init-db.yml` workflow to this repository and push it for you, and/or attempt the Railway CLI `railway run` command here if you want me to try running it from this environment.
