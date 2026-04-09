@@ -21,11 +21,11 @@ export default function HomePage() {
           </Link>
 
           <Link
-            href="/resident/T4-402"
+            href="/resident"
             className="rounded-xl border border-neon-red bg-slate-950/50 p-6 transition hover:bg-neon-red hover:text-slate-950"
           >
-            <h2 className="headline text-xl">Resident App (T4-402)</h2>
-            <p className="mt-2 text-base">WebSocket alerts and real-time approve action.</p>
+            <h2 className="headline text-xl">Resident App</h2>
+            <p className="mt-2 text-base">Choose a flat and open the resident console.</p>
           </Link>
         </div>
       </section>

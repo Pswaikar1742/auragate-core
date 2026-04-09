@@ -41,6 +41,11 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 	- Hardened backend DB startup diagnostics: startup logs now include the underlying DB connectivity error text to speed up Railway/Supabase triage.
 	- Hardened Postgres URL normalization to explicitly use `postgresql+psycopg://` so Python 3.13+ runtimes do not rely on `psycopg2` auto-selection.
 	- Re-ran recursive checks: backend pytest pass, frontend lint/build/smoke pass, and integration harness trace shows `exit_code: 0` on a clean SQLite verification DB.
+	- Added frontend route mapping hardening so app-level navigation is visible even before backend APIs are reachable:
+		- added `/resident` index route with flat selection links.
+		- added app-level `not-found` page with quick navigation links.
+		- updated home page resident entry link to `/resident`.
+	- Revalidated frontend checks after route hardening: lint/build/smoke pass.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).

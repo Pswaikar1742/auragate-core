@@ -657,3 +657,28 @@ Next Step:
   1. In Railway, use a reachable Supabase connection endpoint (prefer Supabase pooler connection string if direct host is unreachable from Railway region).
   2. Temporarily set `AURAGATE_REQUIRE_DB_ON_STARTUP=false`, deploy, run `python -m backend.init_db`, then set it back to `true`.
   3. Re-check Railway deployment health and GitHub commit status on `main`.
+
+---
+
+## 2026-04-10 (Cycle 23)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Reduce frontend 404 confusion by adding explicit app route mapping/fallback pages so UI remains visible even when backend is unavailable.
+- Changes Made:
+  - Added: `frontend/app/resident/page.tsx` as resident index/entry route with flat selection links.
+  - Added: `frontend/app/not-found.tsx` for app-level 404 with direct links to Home, Guard, and Resident routes.
+  - Updated: `frontend/app/page.tsx` resident card now routes to `/resident`.
+  - Updated phase progress notes in `docs/phases/phase-05-hardening-and-demo-readiness.md`.
+- Tests/Checks Run:
+  - `npm --prefix frontend run lint` -> pass.
+  - `npm --prefix frontend run vercel-build` -> pass.
+  - `npm --prefix frontend run smoke` -> pass.
+  - Build output includes mapped routes: `/`, `/guard`, `/resident`, and `/resident/[flatNumber]`.
+- Results:
+  - In-app route mapping now provides explicit entry paths and friendly app-level 404 handling.
+  - Remaining 404 at `auragate-core.vercel.app` is still platform-level alias/protection configuration, not a missing Next.js route in code.
+- Blockers:
+  - Vercel production alias currently returns platform `NOT_FOUND`; preview deployment returns auth-protected `401`.
+- Next Step:
+  1. Push this route-hardening commit to `main` and let Vercel redeploy.
+  2. In Vercel dashboard, verify production alias points to the latest successful deployment and disable production protection if public access is desired.
