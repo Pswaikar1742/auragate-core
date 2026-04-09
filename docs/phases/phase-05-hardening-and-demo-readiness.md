@@ -56,8 +56,21 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- Live checks now show:
 			- Railway `/health` returns `status: ok` and `database: connected`.
 			- Vercel production routes `/`, `/guard`, `/resident`, and `/resident/T4-401` return HTTP 200.
+	- Restored the richer persona dashboard frontend experience from stash history (not present on `dev`/`feat/ui-dashboard` branches):
+		- added resident auth flow (`/resident/login`) and resident operations dashboard (`/resident/dashboard`).
+		- added secure invite pass generation/sharing and TOTP invite page (`/invite/[id]`).
+		- added visitor self-serve mobile flow (`/visitor`) and admin analytics dashboard (`/admin`).
+		- restored shared runtime path helpers and vintage/navy/safety Tailwind tokens used by the restored pages.
+		- added required frontend dependencies: `lucide-react`, `recharts`, `otpauth`.
+	- Revalidated after restoration:
+		- `npm --prefix frontend run lint` (pass, warnings only).
+		- `npm --prefix frontend run vercel-build` (pass).
+		- `npm --prefix frontend run smoke` (pass).
+		- `pytest -q backend/tests/test_escalate.py` (2 passed).
+		- live probes show `https://auragate-core.vercel.app/`, `/guard`, and `/resident/login` returning HTTP 200; Railway `/health` reports `database: connected`.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
 	- Feature-gap documentation for non-MVP blueprint workflows (multi-flat delivery, scout detection, voice-first capture, SOS override, etc.).
 	- Finalize Vercel production alias and deployment protection posture for public demo access.
+	- Execute one complete live browser pass for resident auth -> invite share -> guard check-in -> resident approve with screenshots/log evidence.

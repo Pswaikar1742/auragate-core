@@ -748,3 +748,48 @@ Next Step:
 - Next Step:
   1. Perform one manual browser pass on guard -> check-in -> resident alert flow.
   2. After manual pass, close remaining Phase-05 polish/documentation items.
+
+---
+
+## 2026-04-10 (Cycle 26)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Restore the previously built kiosk/resident persona experience (resident auth, notifications, invite share, TOTP pass) from branch/stash history and validate deploy readiness with backend DB connectivity.
+- Changes Made:
+  - Branch/source verification:
+    - checked `origin/dev`, `origin/feat/ui-dashboard`, and related branches for persona dashboard files; required pages were not present there.
+    - restored required frontend pages/config from stash history snapshot.
+  - Frontend restoration:
+    - Added: `frontend/app/admin/page.tsx`
+    - Added: `frontend/app/invite/[id]/page.tsx`
+    - Added: `frontend/app/resident/login/page.tsx`
+    - Added: `frontend/app/resident/dashboard/page.tsx`
+    - Added: `frontend/app/visitor/page.tsx`
+    - Updated: `frontend/app/page.tsx` (persona dashboard home links)
+    - Updated: `frontend/lib/runtimeConfig.ts` (shared API/WS path helpers used by restored routes)
+    - Updated: `frontend/tailwind.config.ts` (vintage/navy/safety tokens + matching shadows)
+  - Dependencies:
+    - Updated: `frontend/package.json` and lockfile with required UI/data libs: `lucide-react`, `recharts`, `otpauth`.
+  - Docs:
+    - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md`.
+    - Updated: this state-log entry.
+- Tests/Checks Run:
+  - Frontend lint: `npm --prefix frontend run lint` -> pass (non-blocking `@next/next/no-img-element` warnings in restored pages).
+  - Frontend build: `npm --prefix frontend run vercel-build` -> pass.
+  - Frontend smoke: `npm --prefix frontend run smoke` -> pass.
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Live availability probes:
+    - `https://auragate-core.vercel.app/` -> `200`.
+    - `https://auragate-core.vercel.app/guard` -> `200`.
+    - `https://auragate-core.vercel.app/resident/login` -> `200`.
+    - `https://auragate-core-production.up.railway.app/health` -> `200` with `{"status":"ok","database":"connected",...}`.
+    - `HEAD https://auragate-core-production.up.railway.app/api/resident/auth/login` -> `405` with `Allow: POST` (route is present).
+- Results:
+  - Requested persona experience is restored in codebase: guard kiosk flow, resident auth + notifications dashboard, secure invite link sharing, and invite TOTP pass UI.
+  - Frontend compiles for Vercel and backend health confirms Railway DB connectivity.
+- Blockers:
+  - None for code restore/build.
+  - Optional live flow verification still pending for full user-path proof (login -> invite generation/share -> guard check-in -> resident approve).
+- Next Step:
+  1. Commit and push Cycle 26 restore changes to `main` so Vercel/Railway deploy the restored experience.
+  2. Run one browser-based end-to-end demo trace and capture evidence in docs.
