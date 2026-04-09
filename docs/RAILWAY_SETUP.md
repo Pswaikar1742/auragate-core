@@ -33,6 +33,7 @@ Notes on Supabase
 - Supabase provides a Postgres connection string which you can use directly as `DATABASE_URL`.
 - Ensure SSL mode is enabled in the connection string if required by your client (Supabase usually provides the correct URL including `sslmode=require`).
 - If startup logs show `Network is unreachable` when connecting to a `db.<project>.supabase.co` host, switch to Supabase's connection pooler URL (IPv4-friendly) from Supabase -> Connect -> Connection Pooling and use that as `DATABASE_URL`.
+- URL-encode reserved characters in DB passwords (for example, `@` must be `%40`). If not encoded, host parsing can break (symptom: health endpoint shows database target like `6801@aws-...` instead of the real host).
 
 Recommended Railway UI steps
 ----------------------------

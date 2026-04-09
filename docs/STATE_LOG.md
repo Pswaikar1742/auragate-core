@@ -682,3 +682,34 @@ Next Step:
 - Next Step:
   1. Push this route-hardening commit to `main` and let Vercel redeploy.
   2. In Vercel dashboard, verify production alias points to the latest successful deployment and disable production protection if public access is desired.
+
+---
+
+## 2026-04-10 (Cycle 24)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Diagnose why frontend still shows 404 and why backend appears broken after switching to Supabase pooler/public Railway domain.
+- Changes Made:
+  - Verified latest `main` commit deployment statuses: CI success, Railway success, Vercel success.
+  - Live probes confirmed two separate issues:
+    - Vercel production alias `auragate-core.vercel.app` returns platform `NOT_FOUND`.
+    - Railway API responds but health is `degraded` due to disconnected DB.
+  - Updated docs with explicit DB URL encoding requirement for reserved password characters (`@` -> `%40`).
+- Tests/Checks Run:
+  - Vercel probes:
+    - `https://auragate-core.vercel.app/*` -> platform `404 NOT_FOUND`.
+    - `https://auragate-core-git-main-pswaikar1742-gmailcoms-projects.vercel.app/*` -> `401 Authentication Required` (deployment protection).
+  - Railway probes:
+    - `https://auragate-core-production.up.railway.app/health` -> `200` with `{"status":"degraded","database":"disconnected"...}`.
+    - `https://auragate-core-production.up.railway.app/api/health` -> same degraded payload.
+  - Parsed health payload indicated malformed DB target (`6801@aws-...`) consistent with unencoded `@` in password.
+- Results:
+  - Frontend app routes are present and built (`/`, `/guard`, `/resident`, `/resident/[flatNumber]`), so current 404 is Vercel alias/protection configuration, not missing Next routes.
+  - Backend runtime is up, but DB connectivity is blocked by malformed `DATABASE_URL` encoding.
+- Blockers:
+  - `DATABASE_URL` in Railway must use URL-encoded password.
+  - Vercel production alias must be mapped/promoted to latest deployment and protection adjusted for public visibility.
+- Next Step:
+  1. In Railway, set `DATABASE_URL` exactly with `%40` in password and redeploy.
+  2. Confirm Railway `/api/health` returns `status: ok` + `database: connected`.
+  3. In Vercel, set Production Branch to `main` (or promote latest deployment to production) and disable production deployment protection if public access is required.

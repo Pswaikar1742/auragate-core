@@ -46,6 +46,10 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- added app-level `not-found` page with quick navigation links.
 		- updated home page resident entry link to `/resident`.
 	- Revalidated frontend checks after route hardening: lint/build/smoke pass.
+	- Live deployment verification findings:
+		- Railway public domain responds on `/health`, but DB remained disconnected until connection string encoding is corrected.
+		- Root cause identified: unencoded `@` in DB password in `DATABASE_URL` breaks host parsing; password must use `%40`.
+		- Vercel branch deployment URL is reachable behind deployment protection (`401`), while production alias still returns platform `NOT_FOUND` until alias/production mapping is corrected in Vercel settings.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
