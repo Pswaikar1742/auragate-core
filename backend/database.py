@@ -27,7 +27,19 @@ def _normalize_database_url(raw_url: str) -> str:
     if normalized.startswith("postgresql://"):
         normalized = normalized.replace("postgresql://", "postgresql+psycopg://", 1)
 
-    return normalized
+    try:
+        parsed = make_url(normalized)
+    except Exception:
+        return normalized
+
+    # If `@` in password is not URL-encoded, URL parsing can shift the suffix
+    # into host (e.g., host becomes `6801@aws-1-...`). Repair that shape.
+    if parsed.password and parsed.host and "@" in parsed.host:
+        password_suffix, repaired_host = parsed.host.split("@", 1)
+        parsed = parsed.set(password=f"{parsed.password}@{password_suffix}", host=repaired_host)
+
+    # Render canonical URL form so reserved chars in credentials stay encoded.
+    return parsed.render_as_string(hide_password=False)
 
 DATABASE_URL = _normalize_database_url(
     os.getenv(
