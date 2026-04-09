@@ -9,10 +9,10 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - structured recursive test loops and evidence capture
 
 ## Tasks
-- [ ] Execute full Golden Thread scenario repeatedly.
-- [ ] Confirm payload and response schema stability.
-- [ ] Document all failing cases and fixes in state log.
-- [ ] Add/refresh run commands in docs if changed.
+- [x] Execute full Golden Thread scenario repeatedly (local).
+- [x] Confirm payload and response schema stability (local harness + API contract alignment).
+- [x] Document all failing cases and fixes in state log.
+- [x] Add/refresh run commands in docs if changed.
 
 ## Recursive Test Gates
 - run narrow checks on changed area
@@ -26,4 +26,19 @@ Converge frontend and backend into a repeatedly verified end-to-end Golden Threa
 - all test evidence recorded
 
 ## Progress Notes
-- Awaiting dedicated integration execution loops.
+- Integration harness scaffolded and repeatedly validated locally.
+
+- Evidence:
+	- Added `integration/docker-compose.yml` and `integration/run_golden_thread.py`.
+	- Added `.github/workflows/integration.yml` for gated integration harness execution.
+	- Fixed workflow bootstrap path on `main` via workflow-only PR + YAML hotfix PR.
+	- `integration/run_golden_thread.py` emits `integration/last_run.json` with `exit_code` and detailed trace.
+	- Local recursive checks passed: backend pytest, frontend lint/smoke, and full golden-thread run against local `uvicorn`.
+	- GitHub Actions integration run completed successfully on PR #3 via `workflow_dispatch`: run `24067695729`, artifacts uploaded as `integration-run-artifacts`.
+	- Additional pre-Phase-05 validation sweep passed: live browser guard/resident flow (check-in -> alert -> approve), plus negative-path API checks for missing phone (`400`) and unknown flat (`404`).
+
+**Phase 04 status:**
+- Exit criteria satisfied for current MVP Golden Thread.
+
+**Next actions:**
+- Move execution focus to Phase 05 hardening and demo readiness increments.

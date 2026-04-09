@@ -4,3 +4,4 @@ venv/
 .venv/
 .env
 frontend/.next/
+docs/repo-explainer.local.md

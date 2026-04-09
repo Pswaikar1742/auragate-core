@@ -2,9 +2,7 @@
 
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
-const WS_BASE_URL = (process.env.NEXT_PUBLIC_WS_BASE_URL ?? BACKEND_URL).replace(/^http/, "ws");
+import { resolveBackendBase, resolveWsBase } from "../../../lib/runtimeConfig";
 
 type VisitorPayload = {
   id: string;
@@ -24,16 +22,18 @@ type WsMessage = {
 export default function ResidentPage() {
   const params = useParams<{ flatNumber: string }>();
   const flatNumber = params.flatNumber;
+  const backendBase = useMemo(() => resolveBackendBase(), []);
+  const wsBase = useMemo(() => resolveWsBase(backendBase), [backendBase]);
 
   const [connected, setConnected] = useState(false);
   const [currentVisitor, setCurrentVisitor] = useState<VisitorPayload | null>(null);
   const [statusText, setStatusText] = useState("Waiting for gate events...");
   const [approving, setApproving] = useState(false);
 
-  const wsUrl = useMemo(
-    () => `${WS_BASE_URL}/ws/resident/${encodeURIComponent(flatNumber)}`,
-    [flatNumber],
-  );
+  const wsUrl = useMemo(() => {
+    const wsRoot = wsBase.replace(/^http/, "ws");
+    return `${wsRoot}/ws/resident/${encodeURIComponent(flatNumber)}`;
+  }, [flatNumber, wsBase]);
 
   useEffect(() => {
     if (!flatNumber) {
@@ -83,14 +83,14 @@ export default function ResidentPage() {
 
     socket.onclose = () => {
       setConnected(false);
-      setStatusText("Socket disconnected. Refresh to reconnect.");
+      setStatusText(`Socket disconnected. Backend channel: ${wsUrl}`);
       if (pingIntervalId) {
         window.clearInterval(pingIntervalId);
       }
     };
 
     socket.onerror = () => {
-      setStatusText("WebSocket error. Check backend connectivity.");
+      setStatusText(`WebSocket error. Check backend connectivity at ${wsUrl}.`);
     };
 
     return () => {
@@ -108,9 +108,10 @@ export default function ResidentPage() {
 
     setApproving(true);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/visitors/${currentVisitor.id}/approve`, {
-        method: "PUT",
-      });
+      const apiPath = backendBase
+        ? `${backendBase}/api/visitors/${currentVisitor.id}/approve`
+        : `/api/visitors/${currentVisitor.id}/approve`;
+      const response = await fetch(apiPath, { method: "PUT" });
 
       if (!response.ok) {
         const errorPayload = await response.json().catch(() => ({}));
@@ -124,7 +125,12 @@ export default function ResidentPage() {
       setStatusText(`Approved ${currentVisitor.visitor_name}. Gate notified.`);
       setCurrentVisitor(null);
     } catch (error) {
-      setStatusText(error instanceof Error ? error.message : "Unexpected approval failure.");
+      if (error instanceof TypeError) {
+        const baseHint = backendBase || "http://127.0.0.1:8001";
+        setStatusText(`Approval failed because backend is unreachable. Expected: ${baseHint}`);
+      } else {
+        setStatusText(error instanceof Error ? error.message : "Unexpected approval failure.");
+      }
     } finally {
       setApproving(false);
     }
@@ -137,6 +143,7 @@ export default function ResidentPage() {
           Resident Console
         </h1>
         <p className="mt-2 text-center text-lg text-slate-300">Flat {flatNumber}</p>
+        <p className="mt-1 text-center text-xs text-slate-400">Backend target: {backendBase || "relative /api"}</p>
 
         <div className="mt-6 rounded-xl border border-slate-700 bg-slate-950/60 p-4">
           <p>

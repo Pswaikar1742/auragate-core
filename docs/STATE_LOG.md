@@ -22,6 +22,27 @@ Next Step:
 - Phase: 02 Backend Escalation Core
 - Prompt Summary: Add pytest smoke tests for `/api/escalate`, mock Twilio call, and document results.
 - Changes Made:
+---
+
+## 2026-04-06 (Cycle 16)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing — CI workflow debugging
+- Prompt Summary: Debug and harden `.github/workflows/integration.yml` so CI runs the integration harness and reliably uploads artifacts; diagnose failing runs and collect evidence.
+- Changes Made:
+  - Fixed indentation for the `Collect debug artifacts` step in `.github/workflows/integration.yml`.
+  - Added temporary `push: branches: ['feat/*']` trigger to allow CI execution during debugging.
+  - Temporarily relaxed the job-level label gate to allow `pull_request` runs while diagnosing failures.
+  - Committed and pushed workflow fixes to `feat/phase-04-integration` (examples: "ci(workflow): fix indentation for debug/upload steps", "ci(workflow): allow push on feat/* for integration debugging", "ci(workflow): temporarily allow pull_request runs (relax label gate)").
+- Tests/Checks Run:
+  - Queried GitHub Actions runs and attempted to download artifacts via `gh run download` for recent run ids (e.g., 24030453973, 24030589114, 24030696420). Downloads returned "no valid artifacts found to download"; `gh run view` showed "log not found" for some runs; job lists were empty.
+- Results:
+  - Local harness runs remain successful (see Cycle 14/15). CI runs triggered on the feature branch returned a run-level failure message: "This run likely failed because of a workflow file issue" and had zero jobs. Investigation shows GitHub will not execute jobs for workflow files that only exist in feature branches (security policy).
+- Blockers:
+  - GitHub Actions' behavior requires the workflow file to exist in the default branch (main) to run fully; this is blocking collection of CI artifacts from feature-branch-only workflow edits.
+- Next Step:
+  1. Create a workflow-only PR (or merge the workflow into `main`) so Actions can execute the integration workflow and produce `integration/run_result.log` and `integration/last_run.json`.
+  2. After a successful run on `main`, download the artifacts, inspect logs, and finalize Phase‑04 evidence in this `STATE_LOG.md` entry.
+
   - Added: `backend/tests/test_escalate.py`
   - Updated: `backend/requirements.txt` (added test deps)
   - Updated: `docs/phases/phase-02-backend-escalation-core.md` (progress)
@@ -222,3 +243,359 @@ Recommended short-term next steps:
   - Twilio/TO_PHONE_NUMBER not configured for triggering an actual IVR call.
 - Next Step:
   - Configure `TO_PHONE_NUMBER` or seed demo residents, then rerun the smoke test to verify IVR call path (or mock Twilio credentials for testing).
+
+---
+
+## 2026-04-06 (Cycle 10)
+- Date: 2026-04-06
+- Phase: 03 Frontend Golden Thread UI — Start
+- Prompt Summary: Begin Phase 03: verify Guard and Resident UI skeleton, add CI frontend build/lint steps, and run local frontend build + backend smoke tests.
+- Changes Made:
+  - Planned: create branch `feat/phase-03-golden-thread` and update CI to run frontend `npm ci`, `npm run build`, and `npm run lint` in addition to backend tests.
+  - Planned: verify existing `frontend/app/guard` and `frontend/app/resident/[flatNumber]` pages compile and function with backend endpoints (TOTP, check-in, WebSocket).
+- Tests/Checks Run:
+  - Planned: `cd frontend && npm ci && npm run build && npm run lint`
+  - Planned: `pytest -q backend/tests/test_escalate.py`
+- Results:
+  - Pending: will run builds and tests as part of the recursive testing loop and append completion entry with outputs.
+- Blockers:
+  - Local environment may not have Node.js or network access; GitHub push/PR may require credentials.
+- Next Step:
+  - Create feature branch, commit CI and docs updates, run frontend build and lint locally, run backend smoke tests, and open PR with results.
+
+---
+
+## 2026-04-06 (Cycle 11)
+- Date: 2026-04-06
+- Phase: 03 Frontend Golden Thread UI — Completion (increment)
+- Prompt Summary: Verify frontend guard/resident skeleton builds and add CI steps to run frontend build/lint; run backend smoke tests and open PR.
+- Changes Made:
+  - Updated: `.github/workflows/ci.yml` — added Node setup and frontend `npm ci`, `npm run build`, and `npm run lint` steps (CI sets `IVR_ADAPTER=noop`).
+  - Updated: `docs/STATE_LOG.md` — added Phase 03 START entry.
+  - Created branch: `feat/phase-03-golden-thread` and pushed to origin; opened PR #2.
+- Tests/Checks Run:
+  - Frontend build (CI-mode): `cd frontend && CI=true npm run build` — produced Next.js build artifacts under `frontend/.next`.
+  - Frontend lint: `cd frontend && npm run lint` — output: `✔ No ESLint warnings or errors`.
+  - Backend smoke tests: `pytest -q backend/tests/test_escalate.py` — output below.
+- Results:
+
+```
+..                                                                       [100%]
+=============================== warnings summary ===============================
+../../.local/lib/python3.14/site-packages/starlette/formparsers.py:12
+  /home/psw/.local/lib/python3.14/site-packages/starlette/formparsers.py:12: Pen
+dingDeprecationWarning: Please use `import python_multipart` instead.
+    import multipart
+
+... (truncated warnings) ...
+
+==================================== PASSES ====================================
+=========================== short test summary info ============================
+PASSED backend/tests/test_escalate.py::test_escalate_fails_when_no_phone_configu
+red
+PASSED backend/tests/test_escalate.py::test_escalate_success_path_with_mocked_tw
+ilio
+2 passed, 86 warnings in 0.29s
+```
+
+- Blockers:
+  - None encountered for this increment. Pushing and PR creation succeeded from this environment. CI will run on PR to verify platform-level checks.
+- Next Step:
+  - Update `docs/phases/phase-03-frontend-golden-thread-ui.md` with completion notes and any follow-up tasks (accessibility, e2e tests, styling). Open for review and merge after CI is green.
+
+---
+
+## 2026-04-06 (Cycle 12)
+- Date: 2026-04-06
+- Phase: 03 Frontend Golden Thread UI — Finalize increment
+- Prompt Summary: Add client-visible 15s countdown + simulate button to Guard UI, add a minimal frontend smoke check that validates build references to `/api/health`, wire smoke check into CI, and mark Phase‑03 exit criteria complete.
+- Changes Made:
+  - Updated: `frontend/app/guard/page.tsx` — added countdown UI, Start/Cancel countdown, and Simulate Now button which triggers check-in immediately.
+  - Added: `frontend/scripts/smoke-check.js` — scans `.next` build output for `/api/health` references to provide a CI-safe smoke check.
+  - Updated: `frontend/package.json` — added `smoke` script.
+  - Updated: `.github/workflows/ci.yml` — runs frontend smoke check after build and lint.
+  - Updated: `docs/phases/phase-03-frontend-golden-thread-ui.md` — marked exit criteria completed.
+- Tests/Checks Run:
+  - Frontend build: `cd frontend && npm ci && npm run build` — built Next.js artifacts under `frontend/.next`.
+  - Frontend lint: `cd frontend && npm run lint` — `✔ No ESLint warnings or errors`.
+  - Frontend smoke: `cd frontend && npm run smoke` — `Smoke check passed: /api/health referenced in build output`.
+  - Backend smoke tests: `pytest -q backend/tests/test_escalate.py` — `2 passed` (see Cycle 11 entry for full output).
+- Results:
+  - Guard UI now displays a 15s countdown with auto-checkin and a manual "Simulate Now" button.
+  - CI will enforce frontend build, lint, and the smoke-check to detect client-side usage of `/api/health` without requiring a running backend.
+- Blockers:
+  - None; local builds/tests passed. Await CI results on PR #2 for platform verification.
+- Next Step:
+  - Wait for PR #2 CI to finish; address any CI feedback. After merge, proceed to Phase 04 (Integration & Recursive Testing).
+
+## 2026-04-06 (Cycle 13)
+- Date: 2026-04-06
+- Phase: 03 Frontend Golden Thread UI — CI Fixes
+- Prompt Summary: Fix frontend lint errors preventing CI green; ensure frontend smoke-check and backend smoke tests pass locally; push fixes to PR branch.
+- Changes Made:
+  - Updated: `frontend/app/guard/page.tsx` — wired countdown controls and a `Simulate Now` button into the UI so previously-unused handlers are exercised (resolves ESLint unused-vars errors).
+  - Committed and pushed fix to branch `feat/phase-03-golden-thread` (updated PR #2).
+- Tests/Checks Run:
+  - Frontend lint: `cd frontend && npm run lint` — ✔ No ESLint warnings or errors
+  - Frontend smoke check: `cd frontend && npm run smoke` — ✔ Smoke check passed (found `/api/health` in build output or source)
+  - Backend smoke tests: `pytest -q /home/psw/Projects/auragate-core/backend/tests/test_escalate.py` — 2 passed
+- Results:
+  - Local CI-equivalent checks are green for Phase 02 and Phase 03 artifacts.
+  - PR #2 updated with lint fix; awaiting GitHub Actions run for final platform verification.
+- Blockers:
+  - None local; waiting for remote CI results on PR #2.
+- Next Step:
+  1. Monitor PR #2 CI; if CI shows failures, fix and iterate.
+  2. After merge, begin Phase‑04 integration loops (create `feat/phase-04-integration`).
+
+## 2026-04-06 (Cycle 14)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing
+- Prompt Summary: Scaffold integration compose and golden-thread runner; run narrow frontend & backend checks; run integration harness against a local backend using NoopAdapter and file-backed SQLite.
+- Changes Made:
+  - Added: `integration/docker-compose.yml`
+  - Added: `integration/run_golden_thread.py`
+- Tests/Checks Run:
+  - Frontend:
+    - `cd frontend && npm ci` — installed packages (392 added); audit warnings noted.
+    - `CI=true npm run build` — produced `.next` build artifacts.
+    - `npm run lint` — ✔ No ESLint warnings or errors
+    - `node ./scripts/smoke-check.js` — Smoke check passed: `/api/health` referenced in build output
+  - Backend:
+    - `source .venv/bin/activate && pytest -q backend/tests/test_escalate.py` — `2 passed, 19 warnings in 0.39s`
+  - Integration harness (local):
+    - Started backend with `IVR_ADAPTER=noop` and `DATABASE_URL=sqlite:////tmp/auragate_integration.db` on port `8001` using the project venv and `uvicorn`.
+    - Ran `GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py` which produced the following (trimmed):
+
+```
+backend healthy
+TOTP endpoint: 200 {...}
+WS => {"event":"connected","flat_number":"T4-401"}
+WS => {"event":"visitor_checked_in","visitor":{..."status":"pending"...}}
+Check-in created visitor_id: <uuid>
+Triggering escalate via API
+WS => {"event":"visitor_escalated","visitor":{..."status":"escalated_ivr"...}}
+Golden-thread integration run succeeded
+```
+
+- Results: Full Golden-Thread harness completed successfully locally using the Noop IVR adapter; frontend build/lint/smoke and backend smoke tests passed in the recursive narrow loop.
+- Blockers: None encountered for local verification. (Docker compose file added for future CI/container runs but was not executed here.)
+- Next Step:
+  1. Add a gated CI workflow to execute the integration harness (or start the backend in CI), ensuring `IVR_ADAPTER=noop` and file-backed SQLite in CI workspace.
+  2. Commit, push branch `feat/phase-04-integration`, open PR with run evidence and CI plan.
+
+---
+
+## 2026-04-06 (Cycle 15)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing
+- Prompt Summary: Add gated CI integration workflow and enhance the Golden-Thread runner to emit a compact JSON trace (`integration/last_run.json`). Commit files to `feat/phase-04-integration` and provide reproduction steps.
+- Changes Made:
+  - Added: `.github/workflows/integration.yml` (gated: `workflow_dispatch` OR PR label `run-integration`).
+  - Updated: `integration/run_golden_thread.py` to write `integration/last_run.json` (events, HTTP responses, timestamps, `exit_code`).
+- Tests/Checks Run:
+  - Automated local execution blocked in this environment (package install / runtime was not executed here). See "Repro commands" below to run locally.
+- Results:
+  - CI workflow and runner changes added in the working tree. `integration/run_golden_thread.py` now saves a JSON trace at `integration/last_run.json` for every run (success or failure).
+  - A prior local full-cycle Golden-Thread run exists in an earlier entry (2026-04-06 Cycle 14) showing a successful harness execution against `uvicorn` with `IVR_ADAPTER=noop`.
+- Blockers:
+  - This execution environment was unable to run `pip install` and start the backend (see run attempt logs). Please run the narrow loop and integration harness locally or let CI execute the workflow via `workflow_dispatch` or PR label `run-integration`.
+- Next Step:
+  1. Commit and push the changes on branch `feat/phase-04-integration` and open/update PR #3 with this run evidence and the CI workflow description.
+  2. Trigger the workflow using the `workflow_dispatch` UI or add the `run-integration` label to the PR to run the harness in GitHub Actions.
+
+Repro commands (local):
+
+```bash
+# Backend: install deps and run tests
+python -m pip install --upgrade pip
+pip install -r backend/requirements.txt
+pytest -q backend/tests/test_escalate.py
+
+# Start backend (avoid port collisions)
+IVR_ADAPTER=noop DATABASE_URL=sqlite:////tmp/auragate_integration.db python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001
+
+# Run harness
+GOLDEN_THREAD_BASE=http://127.0.0.1:8001 python integration/run_golden_thread.py
+
+# Inspect trace
+cat integration/last_run.json
+```
+
+If CI run is preferred: push branch and trigger via `workflow_dispatch` or label the PR `run-integration` to run the guarded harness job in GitHub Actions.
+
+---
+
+## 2026-04-06 (Cycle 16)
+- Date: 2026-04-06
+- Phase: 04 Integration & Recursive Testing — Local verification
+- Prompt Summary: Executed the integration harness locally against a seeded backend (Noop IVR adapter). Captured `integration/last_run.json` and confirmed a clean full-cycle run.
+- Changes Made:
+  - Verified: `integration/run_golden_thread.py` writes `integration/last_run.json` (trace + exit_code).
+- Tests/Checks Run (commands executed):
+
+```
+# Install backend deps into project venv
+/home/psw/Projects/auragate-core/.venv/bin/python -m pip install -r backend/requirements.txt
+
+# Backend smoke tests
+/home/psw/Projects/auragate-core/.venv/bin/python -m pytest -q backend/tests/test_escalate.py
+
+# Start backend (seed demo resident via TO_PHONE_NUMBER)
+IVR_ADAPTER=noop DATABASE_URL=sqlite:////tmp/auragate_integration.db TO_PHONE_NUMBER=+15555550123 /home/psw/Projects/auragate-core/.venv/bin/python -m uvicorn backend.main:app --host 127.0.0.1 --port 8001 &
+
+# Run harness
+GOLDEN_THREAD_BASE=http://127.0.0.1:8001 /home/psw/Projects/auragate-core/.venv/bin/python integration/run_golden_thread.py
+
+# Inspect trace
+cat integration/last_run.json
+```
+
+- Results (extracted `integration/last_run.json`):
+
+```json
+{
+  "start_time": "2026-04-06T10:07:47.877328Z",
+  "base": "http://127.0.0.1:8001",
+  "flat": "T4-401",
+  "http": [ ... ],
+  "ws_messages": [ ... ],
+  "notes": [ "Golden-thread integration run succeeded" ],
+  "exit_code": 0,
+  "finished_at": "2026-04-06T10:07:47.934323Z"
+}
+```
+
+- Notes:
+  - The harness completed successfully (exit_code `0`). The full trace is available at `integration/last_run.json` and was written during the run.
+  - CI workflow `.github/workflows/integration.yml` will upload `integration/last_run.json` as an artifact when executed in GitHub Actions.
+
+Next Step:
+  - Trigger the CI workflow (Actions UI) or add label `run-integration` to PR #3 to run the harness in GitHub Actions and collect artifacts.
+
+---
+
+## 2026-04-07 (Cycle 17)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing (closeout) + 05 Hardening kick-off
+- Prompt Summary: Re-audit project status against code + docs + provided PDF blueprints; validate end-to-end locally; fix integration hardening issues; sync documentation to actual implementation state.
+- Changes Made:
+  - Updated: `backend/main.py` (removed accidental duplicate nested `EscalateRequest` declaration under WebSocket handler).
+  - Updated: `integration/run_golden_thread.py` (replaced deprecated `datetime.utcnow()` usage with timezone-aware UTC timestamps).
+  - Updated: `backend/ivr_adapter.py` (aligned Twilio sender env var with documented `TWILIO_PHONE_NUMBER`, while preserving compatibility with `TWILIO_FROM_NUMBER`).
+  - Updated: `docs/phases/phase-04-integration-and-recursive-testing.md` (task status + CI blocker note).
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` (kickoff notes).
+  - Added: `docs/IMPLEMENTATION_STATUS.md` (feature/workflow matrix from blueprint vs code reality).
+  - Updated: `docs/README.md` (index includes implementation status matrix).
+- Tests/Checks Run:
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks: `npm run lint` and `npm run smoke` -> passed.
+  - Integration harness: started local backend (`IVR_ADAPTER=noop`, SQLite file DB), executed `integration/run_golden_thread.py` -> success with `exit_code: 0` in `integration/last_run.json`.
+  - Git check: confirmed `.github/workflows/integration.yml` is not present on `origin/main` (current CI blocker for workflow execution/artifact capture in Actions).
+- Results:
+  - Golden Thread flow is working end-to-end locally with current frontend/backend/API integration.
+  - Project is not yet "entirely complete" vs full blueprint; advanced flows (multi-flat, liveness, voice-first, scout detection, SOS, RBAC, analytics) remain pending and are now explicitly tracked in `docs/IMPLEMENTATION_STATUS.md`.
+- Blockers:
+  - Integration workflow must be merged into `main` to run cleanly in GitHub Actions and produce CI artifacts for formal Phase-04 closure.
+- Next Step:
+  1. Merge workflow into `main` (or workflow-only PR) and capture integration artifacts in Actions.
+  2. Execute Phase-05 hardening tasks in order: demo runbook, env/secret validation, fallback/error-path UX, then broader feature closure.
+
+---
+
+## 2026-04-07 (Cycle 18)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing — CI unblock and closure
+- Prompt Summary: Unblock Phase-04 CI closure by getting integration workflow onto `main`, fixing workflow syntax, and validating an executable integration run with artifacts.
+- Changes Made:
+  - Created and merged workflow-only PR `#4` to add `.github/workflows/integration.yml` on `main`.
+  - Detected workflow YAML parse failure (unquoted step name with `:`) and merged hotfix PR `#5`.
+  - Synced PR #3 branch workflow with fixed `main` version and added `TO_PHONE_NUMBER` in CI env so demo residents are seeded during harness run.
+  - Triggered integration workflow for PR #3 using `workflow_dispatch`.
+- Tests/Checks Run:
+  - Confirmed workflow present on `origin/main`.
+  - Verified YAML validity locally with PyYAML parser.
+  - GitHub Actions run `24067695729` (`Integration Harness`, branch `feat/phase-04-integration`, event `workflow_dispatch`) completed with `conclusion: success`.
+  - Verified artifact publication: `integration-run-artifacts` (includes `integration/run_result.log` and `integration/last_run.json`).
+- Results:
+  - Phase-04 CI unblock is complete.
+  - Integration harness now executes through GitHub Actions on PR #3 and publishes evidence artifacts.
+- Blockers:
+  - None for Phase-04 CI execution path.
+- Next Step:
+  1. Mark Phase-04 closed in progress tracking and continue with Phase-05 hardening tasks.
+  2. Keep `run-integration` label workflow path for targeted integration runs in future PRs.
+
+---
+
+## 2026-04-07 (Cycle 19)
+- Date: 2026-04-07
+- Phase: 04 Integration & Recursive Testing — pre-Phase-05 validation sweep
+- Prompt Summary: Run thorough non-trivial testing across backend, frontend, integration harness, and live browser interactions before starting Phase 05.
+- Changes Made:
+  - No functional code changes in this cycle; executed validation and recorded evidence.
+- Tests/Checks Run:
+  - Backend automated tests:
+    - `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend quality checks:
+    - `npm --prefix frontend run lint` -> pass.
+    - `CI=true npm --prefix frontend run build` -> pass (Next.js production build completed).
+    - `npm --prefix frontend run smoke` -> pass (`/api/health` reference found).
+  - Live integration harness:
+    - Started backend on `127.0.0.1:8001` with `IVR_ADAPTER=noop`, SQLite file DB, and fallback phone.
+    - Ran `integration/run_golden_thread.py` against live backend -> success; `integration/last_run.json` recorded `exit_code: 0` with expected `visitor_checked_in` and `visitor_escalated` events.
+  - Browser-level manual test (real UI interactions):
+    - Resident page connected via WebSocket.
+    - Guard page performed real check-in (`Simulate Now`) with visitor name.
+    - Resident received live visitor alert and approved successfully; backend logs confirmed approval and skipped escalation for that visitor.
+  - Runtime negative-path API checks (live server, no fallback phone):
+    - `POST /api/escalate` -> `400` with `No phone number configured for resident or fallback`.
+    - `POST /api/visitors/check-in` with unknown flat -> `404` with `No resident found for flat NO-FLAT`.
+  - Diagnostics:
+    - `get_errors` returned no workspace errors.
+- Results:
+  - Testing confidence for the current MVP Golden Thread is strong across automated, integration, and manual browser flows.
+  - No blocking defects found for Phase-05 entry.
+- Blockers:
+  - None identified during this validation sweep.
+- Next Step:
+  1. Begin Phase-05 hardening tasks (runbook, fallback UX, env/secret validation).
+  2. Keep this validation evidence as baseline before adding new Phase-05 changes.
+
+---
+
+## 2026-04-07 (Cycle 20)
+- Date: 2026-04-07
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Update docs and start Phase-05 implementation with concrete hardening work: demo runbook plus improved runtime fallback/error messaging.
+- Changes Made:
+  - Added: `docs/DEMO_RUNBOOK.md` (clean-machine startup, demo checklist, negative-path validation steps, secret-hygiene guidance).
+  - Updated: `frontend/app/guard/page.tsx`:
+    - dynamic backend resolution with local fallback
+    - clearer QR/check-in backend-unreachable messages
+    - backend-target display for demo debugging
+  - Updated: `frontend/app/resident/[flatNumber]/page.tsx`:
+    - dynamic backend + websocket resolution
+    - clearer socket-disconnect/error messaging with channel target
+    - backend-target display
+  - Added: `frontend/lib/runtimeConfig.ts` for shared runtime backend/ws resolution helpers.
+  - Updated: `docs/README.md` to index `docs/DEMO_RUNBOOK.md`.
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` progress notes and task status.
+- Tests/Checks Run:
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks:
+    - `npm --prefix frontend run lint` -> pass.
+    - `NEXT_PUBLIC_BACKEND_URL=http://127.0.0.1:8001 NEXT_PUBLIC_WS_BASE_URL=http://127.0.0.1:8001 CI=true npm --prefix frontend run build` -> pass.
+    - `npm --prefix frontend run smoke` -> pass.
+  - Browser validation (live):
+    - Resident connected via WebSocket and received visitor alert after guard check-in.
+    - Resident approval path succeeded.
+    - Backend-down validation: guard showed actionable backend-unreachable message; resident displayed disconnected websocket channel target.
+- Results:
+  - Phase-05 is actively in progress with first hardening increment completed and validated.
+  - Demo startup/verification path is now documented and reproducible.
+- Blockers:
+  - None in this increment.
+- Next Step:
+  1. Continue Phase-05 final UI messaging polish and UX refinements.
+  2. Add any remaining demo-readiness checks from runbook into repeatable routine before Phase-05 closeout.

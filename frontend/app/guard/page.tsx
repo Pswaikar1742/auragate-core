@@ -1,9 +1,9 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { HEALTH_SMOKE_PATH, resolveBackendBase } from "../../lib/runtimeConfig";
 
-const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 const FLAT_OPTIONS = ["T4-401", "T4-402"];
 const VISITOR_TYPES = ["Delivery", "Maid", "Guest"];
 
@@ -28,6 +28,7 @@ type VisitorResponse = {
 };
 
 export default function GuardPage() {
+  const backendBase = useMemo(() => resolveBackendBase(), []);
   const [visitorName, setVisitorName] = useState("");
   const [flatNumber, setFlatNumber] = useState(FLAT_OPTIONS[0]);
   const [visitorType, setVisitorType] = useState(VISITOR_TYPES[0]);
@@ -35,6 +36,8 @@ export default function GuardPage() {
   const [loadingTotp, setLoadingTotp] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [statusText, setStatusText] = useState("");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownRef = useRef<number | null>(null);
 
   // Polling keeps OTP metadata fresh so the guard sees live validity windows.
   useEffect(() => {
@@ -42,9 +45,10 @@ export default function GuardPage() {
 
     const loadTotp = async () => {
       try {
-        const response = await fetch(`${BACKEND_URL}/api/guard/totp`, { cache: "no-store" });
+        const apiPath = backendBase ? `${backendBase}/api/guard/totp` : "/api/guard/totp";
+        const response = await fetch(apiPath, { cache: "no-store" });
         if (!response.ok) {
-          throw new Error("Unable to load guard QR payload.");
+          throw new Error(`Unable to load guard QR payload (HTTP ${response.status}).`);
         }
         const payload = (await response.json()) as TotpResponse;
         if (isMounted) {
@@ -53,7 +57,9 @@ export default function GuardPage() {
         }
       } catch (error) {
         if (isMounted) {
-          setStatusText(error instanceof Error ? error.message : "Unknown QR fetch failure.");
+          const baseHint = backendBase || "http://127.0.0.1:8001";
+          const fallback = `Cannot reach backend for QR data. Expected: ${baseHint}`;
+          setStatusText(error instanceof Error ? `${error.message} ${fallback}` : fallback);
           setLoadingTotp(false);
         }
       }
@@ -65,8 +71,21 @@ export default function GuardPage() {
     return () => {
       isMounted = false;
       window.clearInterval(intervalId);
+      if (countdownRef.current) {
+        window.clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
     };
-  }, []);
+  }, [backendBase]);
+
+  // Lightweight client-side smoke ping to help detect runtime integration during demos.
+  // Uses a relative path so CI/build smoke-check can assert presence of `/api/health`.
+  useEffect(() => {
+    const smokePath = backendBase ? `${backendBase}/health` : HEALTH_SMOKE_PATH;
+    void fetch(smokePath, { cache: "no-store" }).catch(() => {
+      /* ignore network errors in browser demos */
+    });
+  }, [backendBase]);
 
   const qrValue = useMemo(() => {
     if (!totp) {
@@ -81,13 +100,19 @@ export default function GuardPage() {
     });
   }, [totp]);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  const performCheckIn = async () => {
     setSubmitting(true);
     setStatusText("");
 
+    if (!visitorName || visitorName.trim().length === 0) {
+      setStatusText("Visitor name is required for check-in.");
+      setSubmitting(false);
+      return;
+    }
+
     try {
-      const response = await fetch(`${BACKEND_URL}/api/visitors/check-in`, {
+      const apiPath = backendBase ? `${backendBase}/api/visitors/check-in` : "/api/visitors/check-in";
+      const response = await fetch(apiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -109,10 +134,66 @@ export default function GuardPage() {
       const payload = (await response.json()) as VisitorResponse;
       setStatusText(`${payload.message} Visitor ID: ${payload.visitor.id}`);
       setVisitorName("");
+
+      // clear any running countdown
+      if (countdownRef.current) {
+        window.clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
+      setCountdown(null);
     } catch (error) {
-      setStatusText(error instanceof Error ? error.message : "Unexpected check-in error.");
+      if (error instanceof TypeError) {
+        const baseHint = backendBase || "http://127.0.0.1:8001";
+        setStatusText(`Backend is unreachable for check-in. Expected: ${baseHint}`);
+      } else {
+        setStatusText(error instanceof Error ? error.message : "Unexpected check-in error.");
+      }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+    await performCheckIn();
+  };
+
+  const startCountdown = (seconds = 15) => {
+    if (!visitorName || visitorName.trim().length === 0) {
+      setStatusText("Enter a visitor name before starting the countdown.");
+      return;
+    }
+
+    if (countdownRef.current) {
+      // already running
+      return;
+    }
+
+    setCountdown(seconds);
+    const id = window.setInterval(() => {
+      setCountdown((c) => {
+        if (c === null) return null;
+        if (c <= 1) {
+          if (countdownRef.current) {
+            window.clearInterval(countdownRef.current);
+            countdownRef.current = null;
+          }
+          // auto-checkin when countdown ends
+          void performCheckIn();
+          return 0;
+        }
+        return c - 1;
+      });
+    }, 1000);
+    countdownRef.current = id as unknown as number;
+  };
+
+  const cancelCountdown = () => {
+    if (countdownRef.current) {
+      window.clearInterval(countdownRef.current);
+      countdownRef.current = null;
+      setCountdown(null);
+      setStatusText("Countdown cancelled.");
     }
   };
 
@@ -143,6 +224,7 @@ export default function GuardPage() {
       <section className="w-full rounded-2xl border border-slate-700/80 bg-slate-900/70 p-6 shadow-neon backdrop-blur-xl md:w-3/5">
         <h2 className="headline text-2xl font-bold text-neon-green">Visitor Check-In</h2>
         <p className="mt-2 text-slate-300">Submit a real check-in that triggers resident WebSocket alert.</p>
+        <p className="mt-1 text-xs text-slate-400">Backend target: {backendBase || "relative /api"}</p>
 
         <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
           <label className="grid gap-2">
@@ -194,6 +276,39 @@ export default function GuardPage() {
             {submitting ? "Submitting..." : "Check In Visitor"}
           </button>
         </form>
+
+        <div className="mt-4 flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => startCountdown(15)}
+            className="rounded-md border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-white hover:border-neon-green"
+          >
+            Start 15s Countdown
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              void performCheckIn();
+            }}
+            className="rounded-md border border-neon-green bg-transparent px-3 py-2 text-sm font-semibold text-neon-green hover:bg-neon-green hover:text-slate-950"
+          >
+            Simulate Now
+          </button>
+
+          {countdown !== null && (
+            <>
+              <button
+                type="button"
+                onClick={cancelCountdown}
+                className="rounded-md border border-rose-500 bg-transparent px-3 py-2 text-sm text-rose-400 hover:bg-rose-500/10"
+              >
+                Cancel
+              </button>
+              <span className="ml-2 font-mono text-sm font-semibold text-neon-green">{countdown}s</span>
+            </>
+          )}
+        </div>
 
         {statusText && (
           <p className="mt-4 rounded-lg border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-200">{statusText}</p>

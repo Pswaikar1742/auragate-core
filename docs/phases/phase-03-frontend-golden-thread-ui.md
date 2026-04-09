@@ -31,3 +31,16 @@ Implement the AuraGate PoC dashboard flow from visitor simulation to escalation 
 - Added `/guard` page with dynamic QR, check-in form, and response handling.
 - Added `/resident/[flatNumber]` page with WebSocket connection and approve workflow.
 - Root page now acts as route hub for Guard and Resident simulation paths.
+ - Updated CI to build and lint frontend on PRs; branch `feat/phase-03-golden-thread` created and PR opened (PR #2).
+
+## Exit Criteria — Completed
+
+- Date: 2026-04-06
+- Status: Completed (increment)
+- Notes:
+	- Guard page: check-in form, TOTP QR, and 15-second countdown + Simulate button implemented.
+	- Resident page: WebSocket resident flow and approve action implemented.
+	- Frontend build (`next build`) and lint (`next lint`) pass locally and are enforced in CI.
+	- Added frontend smoke check: `frontend/scripts/smoke-check.js` scans build artifacts for `/api/health` usage; CI runs this check.
+
+All Phase‑03 exit criteria have been satisfied for this increment. Proceed to Phase 04 once CI on PR #2 is green and review is complete.

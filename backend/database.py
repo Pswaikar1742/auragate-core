@@ -5,22 +5,85 @@ from __future__ import annotations
 import os
 from typing import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
-DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql+psycopg://postgres:postgres@localhost:5432/auragate",
+
+def _normalize_database_url(raw_url: str) -> str:
+    """Normalize DB URL to the expected SQLAlchemy driver format.
+
+    Some cloud providers still expose `postgres://...`, which SQLAlchemy no
+    longer accepts. Rewrite that legacy scheme to `postgresql://...`.
+    """
+
+    if raw_url.startswith("postgres://"):
+        return raw_url.replace("postgres://", "postgresql://", 1)
+    return raw_url
+
+DATABASE_URL = _normalize_database_url(
+    os.getenv(
+        "DATABASE_URL",
+        "sqlite:///./auragate.db",
+    )
 )
 
 # `pool_pre_ping` avoids stale connection failures in long-running services.
-engine = create_engine(DATABASE_URL, pool_pre_ping=True)
+# SQLite needs `check_same_thread=False` for FastAPI/TestClient thread usage.
+# Postgres must not receive this SQLite-only argument.
+engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
+if DATABASE_URL.startswith("sqlite"):
+    engine_kwargs["connect_args"] = {"check_same_thread": False}
+
+engine = create_engine(DATABASE_URL, **engine_kwargs)
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, expire_on_commit=False)
 
 
 class Base(DeclarativeBase):
     """Base class for all SQLAlchemy models."""
+
+
+def database_driver_name() -> str:
+    """Return the current configured DB driver name (e.g., sqlite, postgresql)."""
+
+    if DATABASE_URL.startswith("sqlite"):
+        return "sqlite"
+
+    try:
+        parsed = make_url(DATABASE_URL)
+    except Exception:
+        return "unknown"
+
+    return parsed.drivername.split("+", 1)[0]
+
+
+def database_target_name() -> str:
+    """Return a non-sensitive DB target label suitable for logs/health responses."""
+
+    if DATABASE_URL.startswith("sqlite"):
+        return "sqlite-local"
+
+    try:
+        parsed = make_url(DATABASE_URL)
+    except Exception:
+        return "unknown"
+
+    if parsed.host:
+        return parsed.host
+
+    return "unknown"
+
+
+def check_database_connection() -> tuple[bool, str | None]:
+    """Verify database connectivity with a lightweight `SELECT 1` probe."""
+
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        return True, None
+    except Exception as exc:  # pragma: no cover - runtime connectivity branch
+        return False, str(exc)
 
 
 def get_db() -> Generator[Session, None, None]:
