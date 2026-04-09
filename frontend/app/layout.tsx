@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { Rajdhani } from "next/font/google";
-import { cn } from "@/lib/utils";
+import { cn } from "../lib/utils";
 
 const rajdhani = Rajdhani({ subsets: ['latin'], weight: ['400', '600', '700'], variable: '--font-sans' });
 
