@@ -32,6 +32,7 @@ Notes on Supabase
 ------------------
 - Supabase provides a Postgres connection string which you can use directly as `DATABASE_URL`.
 - Ensure SSL mode is enabled in the connection string if required by your client (Supabase usually provides the correct URL including `sslmode=require`).
+- If startup logs show `Network is unreachable` when connecting to a `db.<project>.supabase.co` host, switch to Supabase's connection pooler URL (IPv4-friendly) from Supabase -> Connect -> Connection Pooling and use that as `DATABASE_URL`.
 
 Recommended Railway UI steps
 ----------------------------
@@ -217,5 +218,22 @@ Security and post-deploy checklist
 - After successful DB init and smoke checks, set `AURAGATE_REQUIRE_DB_ON_STARTUP=true` in Railway to enforce DB availability on restarts.
 - Replace `IVR_ADAPTER=noop` with your production IVR adapter configuration and ensure Twilio credentials (or other provider secrets) are stored securely in Railway variables.
 - Rotate any demo secrets used during seeding.
+
+Repository helpers
+------------------
+This repository includes a couple of convenience files to help with Railway deployments:
+
+- `railway.json.sample` — an example Railway config-as-code file. It demonstrates a recommended `startCommand` for the backend service and minimal env defaults for first deploy. Copy and adapt it if you use Railway config-as-code.
+- `scripts/init_db_remote.sh` — a small executable helper to run the DB initialization (`python -m backend.init_db`) inside the Railway container or via `railway run`.
+
+Examples:
+
+```bash
+# Run the init script via the Railway CLI (project must be linked):
+railway run ./scripts/init_db_remote.sh
+
+# Or run the script directly inside the container (ensuring DATABASE_URL is present):
+AURAGATE_REQUIRE_DB_ON_STARTUP=false ./scripts/init_db_remote.sh
+```
 
 If you'd like, I can add the `.github/workflows/init-db.yml` workflow to this repository and push it for you, and/or attempt the Railway CLI `railway run` command here if you want me to try running it from this environment.

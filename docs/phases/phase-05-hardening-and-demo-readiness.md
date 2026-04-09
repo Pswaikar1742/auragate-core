@@ -36,7 +36,13 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 	- Improved frontend fallback messaging and backend-target visibility in guard/resident screens for demo clarity.
 	- Revalidated with checks: backend pytest pass, frontend lint/build/smoke pass, and live browser guard/resident flow pass.
 	- Verified backend-down UX behavior in browser: guard shows actionable backend-unreachable message; resident shows disconnected channel target.
+	- Hardened Vercel routing config by removing an explicit empty `routes` override in `vercel.json` so Next.js routes are auto-generated during deployment.
+	- Verified deployment URL behavior from CLI: preview deployment is protected (`401 Authentication Required`) and project production alias currently resolves `NOT_FOUND`, so Vercel project-level deployment/alias settings must be finalized.
+	- Hardened backend DB startup diagnostics: startup logs now include the underlying DB connectivity error text to speed up Railway/Supabase triage.
+	- Hardened Postgres URL normalization to explicitly use `postgresql+psycopg://` so Python 3.13+ runtimes do not rely on `psycopg2` auto-selection.
+	- Re-ran recursive checks: backend pytest pass, frontend lint/build/smoke pass, and integration harness trace shows `exit_code: 0` on a clean SQLite verification DB.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
 	- Feature-gap documentation for non-MVP blueprint workflows (multi-flat delivery, scout detection, voice-first capture, SOS override, etc.).
+	- Finalize Vercel production alias and deployment protection posture for public demo access.

@@ -808,14 +808,15 @@ async def lifespan(_: FastAPI):
     # Check DB availability up-front. When `AURAGATE_REQUIRE_DB_ON_STARTUP` is set
     # to a falsy value, we should not fail the process if the DB isn't reachable
     # yet (useful for first deploys while the DB plugin is still provisioning).
-    db_ok, _ = check_database_connection()
+    db_ok, db_error = check_database_connection()
 
     if REQUIRE_DB_ON_STARTUP:
         if not db_ok:
             logger.error(
-                "Database connectivity check failed during startup (driver=%s target=%s)",
+                "Database connectivity check failed during startup (driver=%s target=%s error=%s)",
                 database_driver_name(),
                 database_target_name(),
+                db_error or "unknown",
             )
             raise RuntimeError("Database connectivity check failed during startup.")
         # DB is available and required — ensure schema and demo data exist.
@@ -836,7 +837,8 @@ async def lifespan(_: FastAPI):
                 logger.exception("Database init attempted but failed; continuing without DB init")
         else:
             logger.warning(
-                "Skipping database initialization: AURAGATE_REQUIRE_DB_ON_STARTUP=false and DB is unreachable"
+                "Skipping database initialization: AURAGATE_REQUIRE_DB_ON_STARTUP=false and DB is unreachable (error=%s)",
+                db_error or "unknown",
             )
     yield
     for task in list(running_tasks):

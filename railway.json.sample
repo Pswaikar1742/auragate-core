@@ -1,0 +1,14 @@
+{
+  "services": [
+    {
+      "name": "backend",
+      "path": ".",
+      "startCommand": "gunicorn -k uvicorn.workers.UvicornWorker backend.main:app -b 0.0.0.0:$PORT --log-level INFO",
+      "buildCommand": "",
+      "env": {
+        "AURAGATE_REQUIRE_DB_ON_STARTUP": "false",
+        "IVR_ADAPTER": "noop"
+      }
+    }
+  ]
+}

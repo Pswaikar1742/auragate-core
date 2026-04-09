@@ -599,3 +599,61 @@ Next Step:
 - Next Step:
   1. Continue Phase-05 final UI messaging polish and UX refinements.
   2. Add any remaining demo-readiness checks from runbook into repeatable routine before Phase-05 closeout.
+
+---
+
+## 2026-04-10 (Cycle 21)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Diagnose provided Vercel deployment URL showing NOT_FOUND behavior and apply minimal routing hardening in repository config.
+- Changes Made:
+  - Updated: `vercel.json` — removed explicit empty `routes` array so Vercel can auto-generate Next.js routes from `@vercel/next` build output.
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` — recorded deployment diagnostics and required project-level finalization steps.
+- Tests/Checks Run:
+  - Deployment URL probe: `curl -I https://auragate-core-cptlcrqdi-pswaikar1742-gmailcoms-projects.vercel.app/` -> `401 Authentication Required` (deployment protection active).
+  - Production alias probe: `curl -I https://auragate-core.vercel.app/` -> `404 NOT_FOUND` (no active production alias resolution).
+  - Config validation: `node -e "JSON.parse(fs.readFileSync('vercel.json'))"` -> valid JSON.
+  - Frontend smoke: `npm --prefix frontend run smoke` -> pass.
+- Results:
+  - Repository-side Vercel routing misconfiguration risk reduced.
+  - Live availability is now blocked by Vercel project settings/state (deployment protection + production alias), not by local build syntax.
+- Blockers:
+  - Vercel dashboard access/actions required to finalize production route: promote/redeploy latest main build, set correct root/framework, and adjust deployment protection for public demo access.
+- Next Step:
+  1. In Vercel, ensure `frontend` is the root directory with Next.js framework and no forced static output directory.
+  2. Redeploy latest `main` commit and verify public production URL resolves root route.
+  3. Keep preview protection enabled or disable it intentionally depending on demo audience.
+
+---
+
+## 2026-04-10 (Cycle 22)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Perform full deployment-readiness sweep (branch/check status, API and integration verification, DB connectivity diagnostics), then harden backend startup behavior for clearer Railway failures.
+- Changes Made:
+  - Updated: `backend/database.py` — normalized Postgres URLs now prefer `postgresql+psycopg://` to avoid implicit `psycopg2` driver selection.
+  - Updated: `backend/main.py` — startup DB connectivity logs now include the concrete underlying error string.
+  - Updated: `backend/models.py` — aligned ORM schema with API payload usage (`phone_number`, `image_payload`, `group_id`, session/notification models, and resident profile fields).
+  - Updated: `vercel.json` — removed empty `routes` override to avoid suppressing auto-generated Next.js routing.
+  - Updated docs: phase notes and this state-log entry.
+- Tests/Checks Run:
+  - Branch/check context:
+    - `git branch --show-current` -> `main`.
+    - `gh api .../commits/<origin-main-sha>/status` -> `Vercel: success`, `Railway: failure` on current `main` commit.
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks: `npm --prefix frontend run lint`, `npm --prefix frontend run vercel-build`, `npm --prefix frontend run smoke` -> pass.
+  - API and integration:
+    - Local health probe -> `{"status":"ok","database":"connected"...}`.
+    - Integration harness summary from `integration/last_run.json` -> `exit_code: 0`, note: `Golden-thread integration run succeeded`.
+  - DB connectivity diagnostic probe using provided Supabase-style URL with psycopg:
+    - result: `OperationalError ... Network is unreachable` to DB host.
+- Results:
+  - CI test failure root cause addressed in code (schema mismatch + driver selection hardening).
+  - Repository is now configured with stronger diagnostics and deterministic Postgres driver behavior.
+  - Remaining production blocker is environment/network-level DB reachability for Railway -> Supabase (not local code syntax/build).
+- Blockers:
+  - Railway runtime still fails startup when DB host cannot be reached from environment (currently observed as `Network is unreachable` in direct connectivity probe).
+- Next Step:
+  1. In Railway, use a reachable Supabase connection endpoint (prefer Supabase pooler connection string if direct host is unreachable from Railway region).
+  2. Temporarily set `AURAGATE_REQUIRE_DB_ON_STARTUP=false`, deploy, run `python -m backend.init_db`, then set it back to `true`.
+  3. Re-check Railway deployment health and GitHub commit status on `main`.

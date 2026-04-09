@@ -17,9 +17,17 @@ def _normalize_database_url(raw_url: str) -> str:
     longer accepts. Rewrite that legacy scheme to `postgresql://...`.
     """
 
-    if raw_url.startswith("postgres://"):
-        return raw_url.replace("postgres://", "postgresql://", 1)
-    return raw_url
+    normalized = raw_url
+    if normalized.startswith("postgres://"):
+        normalized = normalized.replace("postgres://", "postgresql://", 1)
+
+    # Prefer psycopg3 explicitly. This avoids relying on SQLAlchemy's default
+    # postgres driver resolution, which may pick psycopg2 in environments where
+    # it is unavailable or incompatible.
+    if normalized.startswith("postgresql://"):
+        normalized = normalized.replace("postgresql://", "postgresql+psycopg://", 1)
+
+    return normalized
 
 DATABASE_URL = _normalize_database_url(
     os.getenv(
