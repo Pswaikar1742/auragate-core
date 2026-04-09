@@ -713,3 +713,38 @@ Next Step:
   1. In Railway, set `DATABASE_URL` exactly with `%40` in password and redeploy.
   2. Confirm Railway `/api/health` returns `status: ok` + `database: connected`.
   3. In Vercel, set Production Branch to `main` (or promote latest deployment to production) and disable production deployment protection if public access is required.
+
+---
+
+## 2026-04-10 (Cycle 25)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Resolve persistent frontend platform 404 and backend DB instability by hardening Vercel monorepo config and repairing malformed pooler DB URLs in backend normalization.
+- Changes Made:
+  - Updated: `backend/database.py`
+    - repaired malformed Postgres URLs where password contains unescaped `@` by recovering password suffix from host and rendering canonical encoded URL.
+    - continued explicit `postgresql+psycopg://` normalization for deterministic driver selection.
+  - Updated: `vercel.json` at repo root
+    - simplified to `builds` with `@vercel/next` for `frontend/package.json` (removed brittle manual copy-based build command).
+  - Added: `frontend/vercel.json`
+    - explicit Next.js framework config when Vercel root directory is set to `frontend`.
+- Tests/Checks Run:
+  - Backend tests: `pytest -q backend/tests/test_escalate.py` -> `2 passed`.
+  - Frontend checks: `npm --prefix frontend run lint`, `npm --prefix frontend run vercel-build`, `npm --prefix frontend run smoke` -> pass.
+  - URL normalization verification:
+    - malformed input `...:Auragate@6801@aws-1-ap-northeast-1.pooler...` normalizes to encoded `%40` form and correct host target.
+  - Live deployment checks after push:
+    - Railway `https://auragate-core-production.up.railway.app/health` -> `200` with `status: ok` and `database: connected`.
+    - Vercel `https://auragate-core.vercel.app/` -> `200`.
+    - Vercel `https://auragate-core.vercel.app/guard` -> `200`.
+    - Vercel `https://auragate-core.vercel.app/resident` -> `200`.
+    - Vercel `https://auragate-core.vercel.app/resident/T4-401` -> `200`.
+- Results:
+  - Frontend is publicly visible again on production routes.
+  - Backend DB connectivity recovers even when operator enters an unescaped `@` in password.
+  - Deployment checks are green on latest commit.
+- Blockers:
+  - None observed for core visibility/connectivity paths in this cycle.
+- Next Step:
+  1. Perform one manual browser pass on guard -> check-in -> resident alert flow.
+  2. After manual pass, close remaining Phase-05 polish/documentation items.

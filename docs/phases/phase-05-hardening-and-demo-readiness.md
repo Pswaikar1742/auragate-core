@@ -50,6 +50,12 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- Railway public domain responds on `/health`, but DB remained disconnected until connection string encoding is corrected.
 		- Root cause identified: unencoded `@` in DB password in `DATABASE_URL` breaks host parsing; password must use `%40`.
 		- Vercel branch deployment URL is reachable behind deployment protection (`401`), while production alias still returns platform `NOT_FOUND` until alias/production mapping is corrected in Vercel settings.
+	- Deployment recovery hardening completed:
+		- Backend now auto-repairs malformed pooler URLs where `@` in password is not URL-encoded and renders canonical encoded URL.
+		- Added `frontend/vercel.json` and simplified root `vercel.json` build mapping to stabilize monorepo deployment behavior.
+		- Live checks now show:
+			- Railway `/health` returns `status: ok` and `database: connected`.
+			- Vercel production routes `/`, `/guard`, `/resident`, and `/resident/T4-401` return HTTP 200.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
