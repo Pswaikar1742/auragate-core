@@ -77,6 +77,40 @@ Troubleshooting
 - If the service fails to start because the DB is not ready, ensure `AURAGATE_REQUIRE_DB_ON_STARTUP` is set to `false` for your first deploy. Once the DB is available, run the init script and then set the variable to `true` to enforce DB availability on startup.
 - For Supabase, confirm the `DATABASE_URL` includes SSL settings if required.
 
+Railway service config parsing errors
+------------------------------------
+If you see an error like:
+
+> Failed to parse your service config. `buildCommand` and `startCommand` cannot be the same.
+
+This usually means the Railway "Build & Run" settings (or your "Config-as-code" file) set both commands to the same value. Fix it in one of these ways:
+
+- Railway UI (recommended):
+	1. Open your Railway project → "Deployments" → click the failing service → "Settings" or "Build & Run".
+	2. Remove the `buildCommand` (Python backend typically does not need one) or set it to a distinct build step.
+	3. Set the `startCommand` to the production start command for the backend. Example (matches `backend/Procfile`):
+
+		```bash
+		# recommended: import the app as a package
+		gunicorn -k uvicorn.workers.UvicornWorker backend.main:app -b 0.0.0.0:$PORT --log-level INFO
+		```
+
+		Note: If you use `backend.main:app`, ensure `backend/__init__.py` is present and
+		committed so Python recognizes `backend/` as a package. Alternatively, you can
+		keep a top-level `main.py` and use `main:app`, but package-style imports are
+		recommended for clarity in multi-module repos.
+
+	4. Save and redeploy.
+
+- If you use Railway "Config-as-code":
+	- Ensure the configured file path points to a valid deployment manifest (not an ESLint config or unrelated file).
+	- Edit the manifest so `startCommand` is the server start command above and either remove `buildCommand` or make it different from `startCommand`.
+
+- Single-repo with multiple services:
+	- Create one Railway service per component (backend and frontend) and configure each service's build/start commands separately to avoid collisions.
+
+After these changes, restart the deployment and check the logs — the duplicate-command parse error should be resolved.
+
 Next steps for me
 -----------------
 - If you want, I can attempt to run Railway CLI commands here if you provide a temporary Railway token (not recommended over chat).

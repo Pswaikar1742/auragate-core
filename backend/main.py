@@ -26,7 +26,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from .ivr_adapter import get_adapter, IVRAdapter
+try:
+    # Prefer an absolute package import (works when the project root is
+    # on PYTHONPATH / when running from repository root).
+    from backend.ivr_adapter import get_adapter, IVRAdapter
+except ImportError:
+    try:
+        # Support running from the `backend/` working directory during
+        # local development (e.g. `uvicorn main:app` inside backend/).
+        from ivr_adapter import get_adapter, IVRAdapter
+    except ImportError:
+        # As a last resort, attempt a relative import (when executed as a
+        # package, e.g. `python -m backend.main`).
+        from .ivr_adapter import get_adapter, IVRAdapter
 
 # Module-level override to allow tests to inject a test adapter instance.
 _ivr_adapter_override: Optional[IVRAdapter] = None
