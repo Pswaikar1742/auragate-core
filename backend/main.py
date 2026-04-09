@@ -26,7 +26,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
-from .ivr_adapter import get_adapter, IVRAdapter
+from ivr_adapter import get_adapter, IVRAdapter
 
 # Module-level override to allow tests to inject a test adapter instance.
 _ivr_adapter_override: Optional[IVRAdapter] = None
@@ -52,26 +52,15 @@ def _get_effective_ivr_adapter() -> IVRAdapter:
         return _ivr_adapter_override
     return get_adapter()
 
-try:
-    from . import models
-    from .database import (
-        SessionLocal,
-        check_database_connection,
-        create_db_and_tables,
-        database_driver_name,
-        database_target_name,
-        get_db,
-    )
-except ImportError:
-    import models
-    from database import (
-        SessionLocal,
-        check_database_connection,
-        create_db_and_tables,
-        database_driver_name,
-        database_target_name,
-        get_db,
-    )
+import models
+from database import (
+    SessionLocal,
+    check_database_connection,
+    create_db_and_tables,
+    database_driver_name,
+    database_target_name,
+    get_db,
+)
 
 load_dotenv()
 
