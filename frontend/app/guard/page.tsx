@@ -9,7 +9,7 @@ import {
   buildWsPath,
 } from "../../lib/runtimeConfig";
 
-const FLAT_OPTIONS = ["T4-401", "T4-402"];
+const DEFAULT_FLAT_OPTIONS = ["T4-401", "T4-402", "T4-503"];
 const VISITOR_TYPES = ["Delivery", "Maid", "Guest"];
 
 type TotpResponse = {
@@ -36,7 +36,8 @@ export default function GuardPage() {
   const backendBase = useMemo(() => resolveBackendBase(), []);
   const wsBase = useMemo(() => resolveWsBase(backendBase), [backendBase]);
   const [visitorName, setVisitorName] = useState("");
-  const [flatNumber, setFlatNumber] = useState(FLAT_OPTIONS[0]);
+  const [flatOptions, setFlatOptions] = useState<string[]>(DEFAULT_FLAT_OPTIONS);
+  const [flatNumber, setFlatNumber] = useState(flatOptions[0]);
   const [visitorType, setVisitorType] = useState(VISITOR_TYPES[0]);
   const [totp, setTotp] = useState<TotpResponse | null>(null);
   const [loadingTotp, setLoadingTotp] = useState(true);
@@ -49,9 +50,15 @@ export default function GuardPage() {
   const [flash, setFlash] = useState<{ visible: boolean; message: string } | null>(null);
   const [flashDuration, setFlashDuration] = useState<number>(8);
   const [guestQr, setGuestQr] = useState<any | null>(null);
-  const [mode, setMode] = useState<"single" | "multi" | "qr" | "frequent">("single");
+  const [mode, setMode] = useState<"single" | "multi" | "qr" | "frequent" | "logs">("single");
   const [multiFlats, setMultiFlats] = useState<string>("");
+  const [logs, setLogs] = useState<Array<any>>([]);
+  const [loadingLogs, setLoadingLogs] = useState(false);
   const [favorites, setFavorites] = useState<Array<{ name: string; flat: string; type: string }>>([]);
+  const [verifyModalOpen, setVerifyModalOpen] = useState(false);
+  const [verifyVisitorId, setVerifyVisitorId] = useState("");
+  const [verifyCode, setVerifyCode] = useState("");
+  const [verifying, setVerifying] = useState(false);
 
   // Polling keeps OTP metadata fresh so the guard sees live validity windows.
   useEffect(() => {
@@ -151,6 +158,55 @@ export default function GuardPage() {
       if (socket) socket.close();
     };
   }, [wsBase, flashDuration]);
+
+  // Fetch recent visitor history, seed flats and favorites
+  const fetchVisitorHistory = async () => {
+    setLoadingLogs(true);
+    try {
+      const api = backendBase ? `${backendBase}/api/visitors/history?limit=200` : `/api/visitors/history?limit=200`;
+      const res = await fetch(api, { cache: "no-store" });
+      if (!res.ok) throw new Error("Unable to fetch visitor history");
+      const payload = await res.json();
+      const rows = payload.visitors ?? [];
+      setLogs(rows);
+
+      // derive flats from history
+      const flats = Array.from(new Set(rows.map((r: any) => r.flat_number).filter(Boolean)));
+      if (flats.length > 0) {
+        setFlatOptions((prev) => Array.from(new Set([...prev, ...flats])));
+        if (!flatNumber && flats.length > 0) setFlatNumber(flats[0]);
+      }
+
+      // seed favorites from most frequent visitor names (top 5)
+      const counts: Record<string, number> = {};
+      rows.forEach((r: any) => {
+        const key = `${r.visitor_name}||${r.flat_number}||${r.visitor_type}`;
+        counts[key] = (counts[key] || 0) + 1;
+      });
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
+      const seeded = sorted.map(([k]) => {
+        const [name, flat, type] = k.split("||");
+        return { name, flat, type };
+      });
+      if (seeded.length && favorites.length === 0) {
+        setFavorites(seeded);
+        try {
+          localStorage.setItem("guard_favorites", JSON.stringify(seeded));
+        } catch {
+          // ignore
+        }
+      }
+    } catch (err) {
+      // ignore silently — guard UI still functional
+    } finally {
+      setLoadingLogs(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchVisitorHistory();
+    // sync flatNumber with options when options change
+  }, []);
 
   // Lightweight client-side smoke ping to help detect runtime integration during demos.
   // Uses a relative path so CI/build smoke-check can assert presence of `/api/health`.
@@ -308,6 +364,7 @@ export default function GuardPage() {
       setStatusText(error instanceof Error ? error.message : "Unexpected multi-flat error.");
     } finally {
       setSubmitting(false);
+      void fetchVisitorHistory();
     }
   };
 
@@ -332,6 +389,8 @@ export default function GuardPage() {
       const payload = await response.json();
       setGuestQr(payload);
       setStatusText("Guest QR generated. Show the QR to the visitor.");
+      // refresh history so guard sees the created visitor row
+      void fetchVisitorHistory();
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "Unexpected QR error.");
     }
@@ -353,6 +412,7 @@ export default function GuardPage() {
       }
       const payload = await response.json();
       setStatusText(payload.message || "Emergency sent.");
+      void fetchVisitorHistory();
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "Unexpected emergency error.");
     }
@@ -388,6 +448,99 @@ export default function GuardPage() {
     } catch {
       // ignore
     }
+  };
+
+  // TOTP verify for expected guest
+  const verifyTotp = async () => {
+    if (!verifyVisitorId || !verifyCode) return setStatusText("visitor id and code required");
+    setVerifying(true);
+    setStatusText("");
+    try {
+      const api = backendBase ? `${backendBase}/api/visitors/verify-totp` : `/api/visitors/verify-totp`;
+      const res = await fetch(api, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ visitor_id: verifyVisitorId, scanned_code: verifyCode }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Verification failed");
+      }
+      const payload = await res.json();
+      setStatusText("Verification success — approved.");
+      setFlash({ visible: true, message: `Approved: ${verifyVisitorId}` });
+      window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
+      setVerifyModalOpen(false);
+      setVerifyVisitorId("");
+      setVerifyCode("");
+      void fetchVisitorHistory();
+    } catch (err) {
+      setStatusText(err instanceof Error ? err.message : "Verification failed");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
+  // Random visitor generator using unplanned endpoint
+  const generateRandomVisitor = async () => {
+    const names = ["Ramesh Kumar", "Sunita Sharma", "Vikram Patel", "Neha Rao", "Aarav Mehta"];
+    const categories: Array<"Delivery" | "Maid" | "Staff" | "Unknown"> = ["Delivery", "Maid", "Staff", "Unknown"];
+    const name = names[Math.floor(Math.random() * names.length)];
+    const category = categories[Math.floor(Math.random() * categories.length)];
+    const targetFlat = flatOptions.length ? flatOptions[Math.floor(Math.random() * flatOptions.length)] : flatNumber;
+    setStatusText("Creating random visitor...");
+    try {
+      const api = backendBase ? `${backendBase}/api/visitors/unplanned` : `/api/visitors/unplanned`;
+      const res = await fetch(api, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category, flat_number: targetFlat, visitor_name: name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || "Failed to create random visitor");
+      }
+      const payload = await res.json();
+      setStatusText(payload.message || "Random visitor created.");
+      void fetchVisitorHistory();
+    } catch (err) {
+      setStatusText(err instanceof Error ? err.message : "Random visitor failed.");
+    }
+  };
+
+  // Logs download helpers
+  const downloadJson = (rows: Array<any>) => {
+    const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `auragate-visitor-logs-${new Date().toISOString()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const toCsv = (rows: Array<any>) => {
+    const headers = ["id", "visitor_name", "visitor_type", "flat_number", "status", "timestamp"];
+    const lines = [headers.join(",")];
+    rows.forEach((r) => {
+      const vals = headers.map((h) => {
+        const v = r[h] ?? "";
+        return `"${String(v).replace(/"/g, '""')}"`;
+      });
+      lines.push(vals.join(","));
+    });
+    return lines.join("\n");
+  };
+
+  const downloadCsv = (rows: Array<any>) => {
+    const csv = toCsv(rows);
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `auragate-visitor-logs-${new Date().toISOString()}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -444,6 +597,18 @@ export default function GuardPage() {
               QR
             </button>
             <button
+              onClick={() => void generateRandomVisitor()}
+              className="rounded-md px-3 py-1 text-sm font-semibold bg-vintage text-navy"
+            >
+              Random
+            </button>
+            <button
+              onClick={() => setMode("logs")}
+              className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "logs" ? "bg-navy text-white" : "bg-vintage text-navy"}`}
+            >
+              Logs
+            </button>
+            <button
               onClick={() => setMode("frequent")}
               className={`rounded-md px-3 py-1 text-sm font-semibold ${mode === "frequent" ? "bg-navy text-white" : "bg-vintage text-navy"}`}
             >
@@ -480,11 +645,11 @@ export default function GuardPage() {
                     onChange={(event) => setFlatNumber(event.target.value)}
                     className="rounded-lg border border-navy bg-vintage px-4 py-3 text-navy outline-none focus:border-safety"
                   >
-                    {FLAT_OPTIONS.map((option) => (
+                      {flatOptions.map((option) => (
                       <option key={option} value={option}>
                         {option}
                       </option>
-                    ))}
+                      ))}
                   </select>
                 </label>
 
@@ -576,7 +741,7 @@ export default function GuardPage() {
                   onChange={(e) => setFlatNumber(e.target.value)}
                   className="rounded-lg border border-navy bg-vintage px-4 py-3 text-navy outline-none focus:border-safety"
                 >
-                  {FLAT_OPTIONS.map((option) => (
+                  {flatOptions.map((option) => (
                     <option key={option} value={option}>
                       {option}
                     </option>
@@ -588,6 +753,13 @@ export default function GuardPage() {
                   className="headline rounded-lg border border-navy px-4 py-3 font-semibold text-navy transition hover:bg-safety hover:text-white"
                 >
                   Generate Guest QR
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVerifyModalOpen(true)}
+                  className="ml-2 rounded-lg border border-navy px-4 py-3 font-semibold text-navy bg-vintage hover:bg-navy hover:text-white"
+                >
+                  Verify Pass
                 </button>
               </div>
 
@@ -630,6 +802,51 @@ export default function GuardPage() {
                           Check-in
                         </button>
                         <button onClick={() => removeFavorite(i)} className="rounded-md border border-navy px-3 py-2 text-sm">Remove</button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {mode === "logs" && (
+            <div className="mt-3">
+              <div className="flex items-center gap-2">
+                <button onClick={() => downloadJson(logs)} className="rounded-md border border-navy px-3 py-2 text-sm">Download JSON</button>
+                <button onClick={() => downloadCsv(logs)} className="rounded-md border border-navy px-3 py-2 text-sm">Download CSV</button>
+                <button onClick={() => void fetchVisitorHistory()} className="rounded-md border border-navy px-3 py-2 text-sm">Refresh</button>
+              </div>
+
+              <div className="mt-3 max-h-64 overflow-y-auto space-y-2">
+                {loadingLogs ? (
+                  <p className="text-sm text-navy/70">Loading logs...</p>
+                ) : logs.length === 0 ? (
+                  <p className="text-sm text-navy/70">No logs available.</p>
+                ) : (
+                  logs.map((row, idx) => (
+                    <div key={row.id ?? idx} className="rounded-md border border-navy bg-vintage p-2 text-sm flex items-center justify-between">
+                      <div>
+                        <div className="font-semibold text-navy">{row.visitor_name}</div>
+                        <div className="text-navy/70 text-xs">{row.visitor_type} • {row.flat_number} • {new Date(row.timestamp).toLocaleString()}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={async () => {
+                            try {
+                              const api = backendBase ? `${backendBase}/api/visitors/${row.id}/approve` : `/api/visitors/${row.id}/approve`;
+                              const res = await fetch(api, { method: "PUT" });
+                              if (!res.ok) throw new Error("Approve failed");
+                              setStatusText("Approved from logs");
+                              void fetchVisitorHistory();
+                            } catch (err) {
+                              setStatusText(err instanceof Error ? err.message : "Approve failed");
+                            }
+                          }}
+                          className="rounded-md border border-navy bg-navy px-3 py-2 text-sm text-white"
+                        >
+                          Approve
+                        </button>
                       </div>
                     </div>
                   ))
@@ -701,6 +918,31 @@ export default function GuardPage() {
         </div>
       </section>
       </main>
+
+      {verifyModalOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy/60 p-4">
+          <div className="w-full max-w-md rounded-2xl border border-navy bg-white p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="headline text-lg font-bold text-navy">Expected Guest Verification</h3>
+              <button onClick={() => setVerifyModalOpen(false)} className="text-navy/70">✕</button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              <label className="grid gap-1">
+                <span className="text-sm text-navy/70">Visitor ID</span>
+                <input value={verifyVisitorId} onChange={(e) => setVerifyVisitorId(e.target.value)} className="rounded-md border border-navy bg-vintage px-3 py-2 text-navy" placeholder="UUID from invite" />
+              </label>
+              <label className="grid gap-1">
+                <span className="text-sm text-navy/70">Enter 6-digit TOTP</span>
+                <input value={verifyCode} onChange={(e) => setVerifyCode(e.target.value)} className="rounded-md border border-navy bg-vintage px-3 py-2 text-navy" placeholder="123456" />
+              </label>
+              <div className="flex gap-2 mt-2">
+                <button onClick={() => void verifyTotp()} disabled={verifying} className="rounded-md border border-navy bg-navy px-4 py-2 text-white">{verifying ? "Verifying..." : "Verify Pass"}</button>
+                <button onClick={() => setVerifyModalOpen(false)} className="rounded-md border border-navy px-4 py-2">Cancel</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {flash && flash.visible ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-safety/95 text-white">
