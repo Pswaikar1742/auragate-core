@@ -793,3 +793,32 @@ Next Step:
 - Next Step:
   1. Commit and push Cycle 26 restore changes to `main` so Vercel/Railway deploy the restored experience.
   2. Run one browser-based end-to-end demo trace and capture evidence in docs.
+
+---
+
+## 2026-04-10 (Cycle 27)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Rebuild guard kiosk visuals to match provided screenshot references and align persona homepage to the same white-mode brutalist design while preserving existing guard API workflows.
+- Changes Made:
+  - Updated: `frontend/app/guard/page.tsx`
+    - replaced inline panel layout with full-screen brutalist kiosk grid (cream/navy/orange palette).
+    - added tile-driven action entry points for expected guest, delivery, multi-flat, daily staff, and unknown visitor flows.
+    - re-skinned all action flows as modal overlays while keeping existing backend endpoints and operational handlers.
+    - preserved existing resident notification, history fetch, QR/TOTP verification, SOS, and approve-from-log pathways.
+  - Updated: `frontend/app/page.tsx`
+    - rebuilt homepage into matching brutalist persona portal cards with consistent palette and interaction language.
+  - Updated: `frontend/app/todos/page.tsx`
+    - removed broken Supabase server import path that was causing deploy-time build failure and replaced with a static demo list page.
+- Tests/Checks Run:
+  - `npm --prefix frontend run lint` -> pass (non-blocking existing warnings only: `@next/next/no-img-element` in resident dashboard and visitor page).
+  - `npm --prefix frontend run vercel-build` -> pass (compiled, linted, generated static pages successfully).
+- Results:
+  - Guard UI now matches provided reference style and remains functional with existing API integrations.
+  - Vercel-equivalent build now succeeds locally for current workspace state.
+- Blockers:
+  - No blocking compile or lint errors remain.
+  - Optional quality warnings persist for `<img>` usage in unrelated pages.
+- Next Step:
+  1. Commit and push Cycle 27 changes to `main`.
+  2. Verify Vercel production deployment for the new commit and confirm updated guard/home visuals are live.

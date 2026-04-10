@@ -13,7 +13,7 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 - [x] Validate `.env` handling and secret hygiene.
 - [x] Create/verify a quick demo startup checklist.
 - [x] Validate behavior when Twilio/env config is missing.
-- [ ] Final UI and messaging polish for live demo clarity.
+- [x] Final UI and messaging polish for live demo clarity.
 
 ## Recursive Test Gates
 - simulate partial failures (missing env, backend unavailable)
@@ -68,6 +68,12 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- `npm --prefix frontend run smoke` (pass).
 		- `pytest -q backend/tests/test_escalate.py` (2 passed).
 		- live probes show `https://auragate-core.vercel.app/`, `/guard`, and `/resident/login` returning HTTP 200; Railway `/health` reports `database: connected`.
+	- Screenshot-aligned kiosk rebuild completed:
+		- rebuilt `frontend/app/guard/page.tsx` into the white-mode brutalist guard terminal matching provided visual references (large tile grid, modal workflows, fixed orange status rail, red SOS action).
+		- kept existing guard API handlers/endpoints intact while moving interaction entrypoints into modal-based UI.
+		- aligned persona homepage (`frontend/app/page.tsx`) to the same brutalist visual language for consistency.
+		- removed deploy-blocking broken import in `frontend/app/todos/page.tsx` (`@/utils/supabase/server`) to restore successful production builds.
+		- revalidated: `npm --prefix frontend run lint` (warnings only) and `npm --prefix frontend run vercel-build` (pass).
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
