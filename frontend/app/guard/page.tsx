@@ -32,6 +32,29 @@ type VisitorResponse = {
   };
 };
 
+type VisitorRow = {
+  id?: string;
+  visitor_name?: string;
+  visitor_type?: string;
+  flat_number?: string;
+  status?: string;
+  timestamp?: string;
+  [k: string]: unknown;
+};
+
+type GuestQrPayload = {
+  visitor_id?: string;
+  provisioned_uri?: string;
+  current_otp?: string;
+  valid_for_seconds?: number;
+  [k: string]: unknown;
+};
+
+type GuardNotification = {
+  received_at: number;
+  payload: Record<string, unknown>;
+};
+
 export default function GuardPage() {
   const backendBase = useMemo(() => resolveBackendBase(), []);
   const wsBase = useMemo(() => resolveWsBase(backendBase), [backendBase]);
@@ -45,14 +68,13 @@ export default function GuardPage() {
   const [statusText, setStatusText] = useState("");
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<number | null>(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  const [notifications, setNotifications] = useState<Array<any>>([]);
+  const [notifications, setNotifications] = useState<GuardNotification[]>([]);
   const [flash, setFlash] = useState<{ visible: boolean; message: string } | null>(null);
   const [flashDuration, setFlashDuration] = useState<number>(8);
-  const [guestQr, setGuestQr] = useState<any | null>(null);
+  const [guestQr, setGuestQr] = useState<GuestQrPayload | null>(null);
   const [mode, setMode] = useState<"single" | "multi" | "qr" | "frequent" | "logs">("single");
   const [multiFlats, setMultiFlats] = useState<string>("");
-  const [logs, setLogs] = useState<Array<any>>([]);
+  const [logs, setLogs] = useState<VisitorRow[]>([]);
   const [loadingLogs, setLoadingLogs] = useState(false);
   const [favorites, setFavorites] = useState<Array<{ name: string; flat: string; type: string }>>([]);
   const [verifyModalOpen, setVerifyModalOpen] = useState(false);
@@ -114,7 +136,6 @@ export default function GuardPage() {
     let pingIntervalId: number | undefined;
 
     socket.onopen = () => {
-      setWsConnected(true);
       setStatusText("Guard channel connected.");
       pingIntervalId = window.setInterval(() => {
         if (socket && socket.readyState === WebSocket.OPEN) socket.send("ping");
@@ -123,19 +144,23 @@ export default function GuardPage() {
 
     socket.onmessage = (event) => {
       try {
-        const payload = JSON.parse(event.data) as any;
+        const raw = JSON.parse(event.data) as unknown;
+        const payload = typeof raw === "object" && raw !== null ? (raw as Record<string, unknown>) : {};
         // record notification for guard UI
         setNotifications((prev) => [{ received_at: Date.now(), payload }, ...prev].slice(0, 50));
 
-        if (payload.event === "visitor_approved" && payload.visitor) {
-          const name = payload.visitor.visitor_name || "Visitor";
+        const eventName = typeof payload.event === "string" ? payload.event : undefined;
+
+        if (eventName === "visitor_approved" && typeof payload.visitor === "object" && payload.visitor !== null) {
+          const visitor = payload.visitor as Record<string, unknown>;
+          const name = typeof visitor.visitor_name === "string" ? visitor.visitor_name : "Visitor";
           setStatusText(`Approved: ${name}`);
           // flash green overlay
           setFlash({ visible: true, message: `Approved: ${name}` });
           window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
         }
 
-        if (payload.event === "sos_alert") {
+        if (eventName === "sos_alert") {
           setStatusText("SOS alert received — check notifications.");
         }
       } catch {
@@ -144,7 +169,6 @@ export default function GuardPage() {
     };
 
     socket.onclose = () => {
-      setWsConnected(false);
       setStatusText("Guard channel disconnected.");
       if (pingIntervalId) window.clearInterval(pingIntervalId);
     };
@@ -167,11 +191,17 @@ export default function GuardPage() {
       const res = await fetch(api, { cache: "no-store" });
       if (!res.ok) throw new Error("Unable to fetch visitor history");
       const payload = await res.json();
-      const rows = payload.visitors ?? [];
+      const rows = (payload.visitors ?? []) as VisitorRow[];
       setLogs(rows);
 
       // derive flats from history
-      const flats = Array.from(new Set(rows.map((r: any) => r.flat_number).filter(Boolean)));
+      const flats = Array.from(
+        new Set(
+          rows
+            .map((r) => r.flat_number)
+            .filter((x): x is string => typeof x === "string")
+        )
+      );
       if (flats.length > 0) {
         setFlatOptions((prev) => Array.from(new Set([...prev, ...flats])));
         if (!flatNumber && flats.length > 0) setFlatNumber(flats[0]);
@@ -179,8 +209,8 @@ export default function GuardPage() {
 
       // seed favorites from most frequent visitor names (top 5)
       const counts: Record<string, number> = {};
-      rows.forEach((r: any) => {
-        const key = `${r.visitor_name}||${r.flat_number}||${r.visitor_type}`;
+      rows.forEach((r) => {
+        const key = `${r.visitor_name ?? ""}||${r.flat_number ?? ""}||${r.visitor_type ?? ""}`;
         counts[key] = (counts[key] || 0) + 1;
       });
       const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 8);
@@ -196,7 +226,7 @@ export default function GuardPage() {
           // ignore
         }
       }
-    } catch (err) {
+    } catch {
       // ignore silently — guard UI still functional
     } finally {
       setLoadingLogs(false);
@@ -509,7 +539,7 @@ export default function GuardPage() {
   };
 
   // Logs download helpers
-  const downloadJson = (rows: Array<any>) => {
+  const downloadJson = (rows: VisitorRow[]) => {
     const blob = new Blob([JSON.stringify(rows, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -519,12 +549,12 @@ export default function GuardPage() {
     URL.revokeObjectURL(url);
   };
 
-  const toCsv = (rows: Array<any>) => {
+  const toCsv = (rows: VisitorRow[]) => {
     const headers = ["id", "visitor_name", "visitor_type", "flat_number", "status", "timestamp"];
     const lines = [headers.join(",")];
     rows.forEach((r) => {
       const vals = headers.map((h) => {
-        const v = r[h] ?? "";
+        const v = (r as Record<string, unknown>)[h] ?? "";
         return `"${String(v).replace(/"/g, '""')}"`;
       });
       lines.push(vals.join(","));
@@ -532,7 +562,7 @@ export default function GuardPage() {
     return lines.join("\n");
   };
 
-  const downloadCsv = (rows: Array<any>) => {
+  const downloadCsv = (rows: VisitorRow[]) => {
     const csv = toCsv(rows);
     const blob = new Blob([csv], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
@@ -909,8 +939,12 @@ export default function GuardPage() {
             ) : (
               notifications.map((item, idx) => (
                 <div key={idx} className="rounded-md border border-navy bg-vintage p-2 text-sm">
-                  <div className="font-bold text-navy">{item.payload.event}</div>
-                  <div className="text-navy/70">{item.payload.visitor ? `${item.payload.visitor.visitor_name} • ${item.payload.flat_number ?? item.payload.visitor.flat_number}` : JSON.stringify(item.payload)}</div>
+                  <div className="font-bold text-navy">{String(item.payload['event'] ?? '')}</div>
+                  <div className="text-navy/70">{
+                    typeof item.payload['visitor'] === 'object' && item.payload['visitor'] !== null
+                      ? `${String(((item.payload['visitor'] as Record<string, unknown>)['visitor_name']) ?? '')} • ${String(item.payload['flat_number'] ?? ((item.payload['visitor'] as Record<string, unknown>)['flat_number'] ?? ''))}`
+                      : JSON.stringify(item.payload)
+                  }</div>
                 </div>
               ))
             )}
