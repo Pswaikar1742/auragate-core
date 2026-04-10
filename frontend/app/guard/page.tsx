@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import {
   HEALTH_SMOKE_PATH,
@@ -184,7 +184,7 @@ export default function GuardPage() {
   }, [wsBase, flashDuration]);
 
   // Fetch recent visitor history, seed flats and favorites
-  const fetchVisitorHistory = async () => {
+  const fetchVisitorHistory = useCallback(async () => {
     setLoadingLogs(true);
     try {
       const api = backendBase ? `${backendBase}/api/visitors/history?limit=200` : `/api/visitors/history?limit=200`;
@@ -231,12 +231,12 @@ export default function GuardPage() {
     } finally {
       setLoadingLogs(false);
     }
-  };
+  }, [backendBase]);
 
   useEffect(() => {
     void fetchVisitorHistory();
     // sync flatNumber with options when options change
-  }, []);
+  }, [fetchVisitorHistory]);
 
   // Lightweight client-side smoke ping to help detect runtime integration during demos.
   // Uses a relative path so CI/build smoke-check can assert presence of `/api/health`.
@@ -496,7 +496,7 @@ export default function GuardPage() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.detail || "Verification failed");
       }
-      const payload = await res.json();
+      await res.json();
       setStatusText("Verification success — approved.");
       setFlash({ visible: true, message: `Approved: ${verifyVisitorId}` });
       window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
