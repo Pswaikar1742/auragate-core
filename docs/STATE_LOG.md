@@ -822,3 +822,28 @@ Next Step:
 - Next Step:
   1. Commit and push Cycle 27 changes to `main`.
   2. Verify Vercel production deployment for the new commit and confirm updated guard/home visuals are live.
+
+---
+
+## 2026-04-10 (Cycle 28)
+- Date: 2026-04-10
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Fix invite guest-pass page theme mismatch and remove location gating so TOTP invite link can proceed directly to guard approval flow.
+- Changes Made:
+  - Updated: `frontend/app/invite/[id]/page.tsx`
+    - replaced older dark/neon visual style with white/orange brutalist theme aligned to latest guard/home pages.
+    - disabled geolocation-based deny gate and added inline comment documenting intentional product behavior change.
+    - invite pass now directly generates TOTP seed/QR on load and provides retry action on generation errors.
+    - retained dynamic QR + rotating OTP logic and existing backend endpoint usage (`/api/totp/generate`).
+  - Updated: `docs/phases/phase-05-hardening-and-demo-readiness.md` (progress note for this increment).
+- Tests/Checks Run:
+  - `npm --prefix frontend run lint` -> pass (existing non-blocking `@next/next/no-img-element` warnings only in unrelated files).
+  - `npm --prefix frontend run vercel-build` -> pass (Next.js production build succeeded).
+- Results:
+  - Invite TOTP link no longer blocks on location verification and consistently shows approval-ready QR/TOTP pass.
+  - Guest-pass UI now matches the white/orange design system in production-target pages.
+- Blockers:
+  - No blocking issues for this increment.
+- Next Step:
+  1. Commit and push Cycle 28 changes to `main`.
+  2. Verify live invite URL reflects new theme and direct TOTP flow on mobile.

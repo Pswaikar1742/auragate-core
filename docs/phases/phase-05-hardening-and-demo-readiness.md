@@ -74,6 +74,11 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- aligned persona homepage (`frontend/app/page.tsx`) to the same brutalist visual language for consistency.
 		- removed deploy-blocking broken import in `frontend/app/todos/page.tsx` (`@/utils/supabase/server`) to restore successful production builds.
 		- revalidated: `npm --prefix frontend run lint` (warnings only) and `npm --prefix frontend run vercel-build` (pass).
+	- Guest-pass parity update completed:
+		- updated `frontend/app/invite/[id]/page.tsx` to use the white/orange brutalist palette consistent with guard/home pages.
+		- disabled geolocation gate intentionally (commented rationale in code) so invite/TOTP links proceed directly to QR + rotating OTP flow.
+		- invite pass now always renders approval-ready QR/TOTP and retry path on seed generation errors.
+		- revalidated with `npm --prefix frontend run lint` (warnings only) and `npm --prefix frontend run vercel-build` (pass).
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).

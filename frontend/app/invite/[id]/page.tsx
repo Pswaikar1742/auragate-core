@@ -3,7 +3,7 @@
 import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Clock3, Loader2, MapPin, QrCode, ShieldAlert, ShieldCheck } from "lucide-react";
+import { CheckCircle2, Clock3, Loader2, QrCode, ShieldCheck } from "lucide-react";
 import * as OTPAuth from "otpauth";
 import { buildApiPath, resolveBackendBase } from "../../../lib/runtimeConfig";
 
@@ -13,36 +13,12 @@ type InviteTotpSeedResponse = {
   interval_seconds: number;
 };
 
-type GeoState = "checking" | "denied" | "allowed";
-
-const GATE_COORDS = { latitude: 12.9716, longitude: 77.5946 };
-const PROXIMITY_THRESHOLD_METERS = 100;
-
-function toRad(value: number): number {
-  return (value * Math.PI) / 180;
-}
-
-function distanceMeters(aLat: number, aLon: number, bLat: number, bLon: number): number {
-  const earthRadius = 6371000;
-  const dLat = toRad(bLat - aLat);
-  const dLon = toRad(bLon - aLon);
-  const lat1 = toRad(aLat);
-  const lat2 = toRad(bLat);
-
-  const haversine =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-
-  return earthRadius * 2 * Math.atan2(Math.sqrt(haversine), Math.sqrt(1 - haversine));
-}
-
 export default function InvitePassPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const backendBase = useMemo(() => resolveBackendBase(), []);
 
-  const [geoState, setGeoState] = useState<GeoState>("checking");
-  const [distance, setDistance] = useState<number | null>(null);
+  const [loadingSeed, setLoadingSeed] = useState(true);
   const [errorMessage, setErrorMessage] = useState("");
 
   const [inviteTotp, setInviteTotp] = useState<InviteTotpSeedResponse | null>(null);
@@ -64,6 +40,8 @@ export default function InvitePassPage() {
   const guestLabel = `${guestName}-${inviteId}`;
 
   const loadTotpSeed = useCallback(async () => {
+    setLoadingSeed(true);
+    setErrorMessage("");
     const guestQuery = encodeURIComponent(guestLabel);
     const flatQuery = encodeURIComponent(flatNumber);
     const apiPath = buildApiPath(
@@ -82,6 +60,7 @@ export default function InvitePassPage() {
 
     setInviteTotp(payload);
     setPulseKey((value) => value + 1);
+    setLoadingSeed(false);
   }, [backendBase, flatNumber, guestLabel]);
 
   const generateTotpCode = useCallback(
@@ -99,56 +78,17 @@ export default function InvitePassPage() {
     [guestLabel],
   );
 
-  const verifyProximity = useCallback(async () => {
-    setGeoState("checking");
-    setErrorMessage("");
-
-    try {
-      if (!("geolocation" in navigator)) {
-        throw new Error("Geolocation is not supported by this browser.");
-      }
-
-      const position = await new Promise<GeolocationPosition>((resolve, reject) => {
-        navigator.geolocation.getCurrentPosition(resolve, reject, {
-          enableHighAccuracy: true,
-          timeout: 9000,
-          maximumAge: 0,
-        });
-      });
-
-      const latitude = position.coords.latitude;
-      const longitude = position.coords.longitude;
-
-      const meterDistance = distanceMeters(
-        latitude,
-        longitude,
-        GATE_COORDS.latitude,
-        GATE_COORDS.longitude,
-      );
-      setDistance(meterDistance);
-
-      if (meterDistance > PROXIMITY_THRESHOLD_METERS) {
-        setGeoState("denied");
-        return;
-      }
-
-      await loadTotpSeed();
-      setGeoState("allowed");
-    } catch (error) {
-      setGeoState("denied");
-      setErrorMessage(error instanceof Error ? error.message : "Unable to verify location.");
-    }
+  useEffect(() => {
+    // Location gate intentionally disabled by product request.
+    // Previous geofence checks blocked valid invite usage on phones.
+    // We now proceed directly with TOTP invite generation.
+    void loadTotpSeed().catch((error) => {
+      setLoadingSeed(false);
+      setErrorMessage(error instanceof Error ? error.message : "Unable to generate invite pass.");
+    });
   }, [loadTotpSeed]);
 
   useEffect(() => {
-    void verifyProximity();
-  }, [verifyProximity]);
-
-  useEffect(() => {
-    if (geoState !== "allowed") {
-      return;
-    }
-
     if (!inviteTotp) {
       return;
     }
@@ -186,7 +126,7 @@ export default function InvitePassPage() {
         window.clearInterval(rotationIntervalId);
       }
     };
-  }, [geoState, generateTotpCode, inviteTotp]);
+  }, [generateTotpCode, inviteTotp]);
 
   const qrValue = useMemo(() => {
     if (!inviteTotp || !currentTotp) {
@@ -201,84 +141,81 @@ export default function InvitePassPage() {
 
   return (
     <>
-      <main className="grid-overlay min-h-screen bg-slate-900 px-4 py-6 text-white sm:hidden">
-        <section className="mx-auto w-full max-w-sm rounded-2xl border border-slate-700/70 bg-slate-800/60 p-5 shadow-[0_0_34px_rgba(34,211,238,0.16)] backdrop-blur-xl">
+      <main className="grid-overlay min-h-screen bg-vintage px-4 py-6 text-navy sm:hidden">
+        <section className="mx-auto w-full max-w-sm border-4 border-navy bg-white p-5 shadow-[6px_6px_0px_#F25C05]">
           <div className="flex items-center justify-between">
-            <p className="text-xs uppercase tracking-[0.2em] text-cyan-300">AuraGate Invite Pass</p>
-            <MapPin className="h-5 w-5 text-cyan-200" />
+            <p className="text-xs uppercase tracking-[0.2em] text-navy/70">AuraGate Invite Pass</p>
+            <ShieldCheck className="h-5 w-5 text-navy/60" />
           </div>
-          <h1 className="headline mt-2 text-2xl text-cyan-100">Visitor Pass #{inviteId}</h1>
-          <p className="mt-1 text-xs text-slate-300">
+          <h1 className="headline mt-2 text-3xl text-navy">Visitor Pass #{inviteId}</h1>
+          <p className="mt-1 text-xs text-navy/70">
             {guestName} • {visitPurpose} • {flatHint}
           </p>
 
-          {geoState === "checking" && (
-            <div className="mt-5 rounded-xl border border-cyan-300/60 bg-cyan-400/10 p-4 text-center">
-              <Loader2 className="mx-auto h-8 w-8 animate-spin text-cyan-200" />
-              <p className="mt-3 text-sm text-cyan-100">Verifying Proximity to Gate...</p>
+          {loadingSeed && (
+            <div className="mt-5 border-2 border-navy/60 bg-vintage p-4 text-center">
+              <Loader2 className="mx-auto h-8 w-8 animate-spin text-navy/60" />
+              <p className="mt-3 text-sm font-semibold uppercase tracking-[0.14em] text-navy/70">Generating secure invite pass...</p>
             </div>
           )}
 
-          {geoState === "denied" && (
-            <div className="mt-5 rounded-xl border border-rose-400/70 bg-rose-500/10 p-4">
-              <div className="flex items-start gap-2">
-                <ShieldAlert className="mt-0.5 h-5 w-5 text-rose-300" />
-                <div>
-                  <p className="font-semibold text-rose-200">
-                    🛑 You are not at the gate. QR will unlock upon arrival.
-                  </p>
-                  {distance !== null && <p className="mt-1 text-xs text-rose-100">Distance: {Math.round(distance)}m</p>}
-                  {errorMessage && <p className="mt-1 text-xs text-rose-100">{errorMessage}</p>}
-                  <button
-                    type="button"
-                    onClick={() => void verifyProximity()}
-                    className="mt-3 rounded-md border border-rose-300/70 bg-rose-300/10 px-3 py-1.5 text-xs font-semibold text-rose-100 hover:bg-rose-300 hover:text-slate-950"
-                  >
-                    I am at the gate - Recheck location
-                  </button>
-                </div>
-              </div>
+          {!loadingSeed && errorMessage && (
+            <div className="mt-5 border-2 border-danger bg-vintage p-4">
+              <p className="text-sm font-semibold text-danger">{errorMessage}</p>
+              <button
+                type="button"
+                onClick={() => void loadTotpSeed().catch((error) => {
+                  setLoadingSeed(false);
+                  setErrorMessage(error instanceof Error ? error.message : "Unable to generate invite pass.");
+                })}
+                className="mt-3 border-2 border-navy bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-navy"
+              >
+                Retry
+              </button>
             </div>
           )}
 
-          {geoState === "allowed" && inviteTotp && (
+          {!loadingSeed && !errorMessage && inviteTotp && (
             <div className="mt-5 space-y-4">
-              <div className="rounded-xl border border-emerald-400/70 bg-emerald-500/10 p-3 text-emerald-100">
-                <p className="inline-flex items-center gap-2 text-sm font-semibold">
-                  <ShieldCheck className="h-4 w-4" />
-                  Proximity check passed. Gate unlock QR active.
+              <div className="border-2 border-navy/60 bg-vintage p-3 text-navy">
+                <p className="inline-flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.12em]">
+                  <CheckCircle2 className="h-4 w-4 text-safety" />
+                  Location gate disabled. QR + TOTP approval active.
                 </p>
               </div>
 
-              <div className="rounded-2xl border border-fuchsia-400/60 bg-slate-950/80 p-4 shadow-[0_0_28px_rgba(217,70,239,0.24)]">
-                <div className="mb-3 flex items-center justify-between text-xs text-fuchsia-200">
+              <div className="border-4 border-navy bg-white p-4 shadow-[4px_4px_0px_#F25C05]">
+                <div className="mb-3 flex items-center justify-between text-xs text-navy/60">
                   <span className="inline-flex items-center gap-1">
-                    <QrCode className="h-3.5 w-3.5" />
+                    <QrCode className="h-3.5 w-3.5 text-navy/70" />
                     Dynamic TOTP QR
                   </span>
                   <span className="inline-flex items-center gap-1">
-                    <Clock3 className="h-3.5 w-3.5" />
+                    <Clock3 className="h-3.5 w-3.5 text-navy/70" />
                     Refresh in {validFor}s
                   </span>
                 </div>
                 <div
                   key={pulseKey}
-                  className="mx-auto flex w-fit justify-center rounded-xl border border-fuchsia-300/50 bg-slate-900 p-3 animate-pulse"
+                  className="mx-auto flex w-fit justify-center border-2 border-navy/60 bg-white p-3 animate-pulse"
                 >
-                  <QRCodeSVG value={qrValue} size={220} bgColor="#0f172a" fgColor="#22d3ee" />
+                  <QRCodeSVG value={qrValue} size={220} bgColor="#F4F1EA" fgColor="#1B2A47" />
                 </div>
-                <p className="mt-3 text-center text-xs text-slate-400">Visitor ID: {inviteTotp.visitor_id}</p>
-                <p className="mt-1 text-center text-xs text-slate-400">OTP Snapshot: {currentTotp}</p>
+                <p className="mt-3 text-center text-xs text-navy/60">Visitor ID: {inviteTotp.visitor_id}</p>
+                <p className="mt-1 text-center text-xs text-navy/60">OTP Snapshot: {currentTotp}</p>
+                <p className="mt-2 border-t border-navy/30 pt-2 text-center text-xs font-semibold uppercase tracking-[0.12em] text-navy/70">
+                  Show this QR at gate for guard-side TOTP approval.
+                </p>
               </div>
             </div>
           )}
         </section>
       </main>
 
-      <main className="hidden min-h-screen items-center justify-center bg-slate-900 px-8 text-white sm:flex">
-        <section className="rounded-2xl border border-slate-700/80 bg-slate-800/60 p-8 text-center shadow-[0_0_30px_rgba(56,189,248,0.14)] backdrop-blur-xl">
-          <p className="headline text-2xl text-cyan-100">Open This Pass on Mobile</p>
-          <p className="mt-2 text-slate-300">The invite QR unlock flow is optimized for phone geolocation and camera scanning.</p>
+      <main className="hidden min-h-screen items-center justify-center bg-vintage px-8 text-navy sm:flex">
+        <section className="rounded-2xl border border-navy/80 bg-white p-8 text-center shadow-offset-safety">
+          <p className="headline text-2xl text-navy">Open This Pass on Mobile</p>
+          <p className="mt-2 text-navy/70">The invite QR unlock flow is optimized for phone geolocation and camera scanning.</p>
         </section>
       </main>
     </>
