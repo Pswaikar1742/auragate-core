@@ -29,36 +29,42 @@ type GeofenceState = {
   longitude: number;
 };
 
-const GATE_COORDINATES = {
-  latitude: 19.87,
-  longitude: 75.34,
-};
-const MAX_ALLOWED_DISTANCE_METERS = 100;
+// Geolocation gate logic disabled for testing and CI builds. Keep the
+// original constants here commented so they can be re-enabled later if
+// needed. Leaving them uncommented caused ESLint `no-unused-vars` errors
+// in non-geolocation builds.
+// const GATE_COORDINATES = {
+//   latitude: 19.87,
+//   longitude: 75.34,
+// };
+// const MAX_ALLOWED_DISTANCE_METERS = 100;
 
-function toRadians(value: number): number {
-  return (value * Math.PI) / 180;
-}
-
-function calculateDistanceMeters(
-  fromLatitude: number,
-  fromLongitude: number,
-  toLatitude: number,
-  toLongitude: number,
-): number {
-  const earthRadiusMeters = 6_371_000;
-  const deltaLatitude = toRadians(toLatitude - fromLatitude);
-  const deltaLongitude = toRadians(toLongitude - fromLongitude);
-
-  const a =
-    Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
-    Math.cos(toRadians(fromLatitude)) *
-      Math.cos(toRadians(toLatitude)) *
-      Math.sin(deltaLongitude / 2) *
-      Math.sin(deltaLongitude / 2);
-
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-  return earthRadiusMeters * c;
-}
+// Geolocation helpers disabled (commented out) to avoid linting errors
+// while geolocation enforcement is turned off during testing.
+// function toRadians(value: number): number {
+//   return (value * Math.PI) / 180;
+// }
+//
+// function calculateDistanceMeters(
+//   fromLatitude: number,
+//   fromLongitude: number,
+//   toLatitude: number,
+//   toLongitude: number,
+// ): number {
+//   const earthRadiusMeters = 6_371_000;
+//   const deltaLatitude = toRadians(toLatitude - fromLatitude);
+//   const deltaLongitude = toRadians(toLongitude - fromLongitude);
+//
+//   const a =
+//     Math.sin(deltaLatitude / 2) * Math.sin(deltaLatitude / 2) +
+//     Math.cos(toRadians(fromLatitude)) *
+//       Math.cos(toRadians(toLatitude)) *
+//       Math.sin(deltaLongitude / 2) *
+//       Math.sin(deltaLongitude / 2);
+//
+//   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+//   return earthRadiusMeters * c;
+// }
 
 function geolocationErrorMessage(error: GeolocationPositionError): string {
   if (error.code === error.PERMISSION_DENIED) {
@@ -179,19 +185,22 @@ export default function VisitorPage() {
     setStatusText("Fill details, capture selfie, and request entry.");
   }
 
-  async function getCurrentPosition(): Promise<GeolocationPosition> {
-    if (!navigator.geolocation) {
-      throw new Error("Geolocation is not supported in this browser.");
-    }
-
-    return await new Promise((resolve, reject) => {
-      navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: true,
-        timeout: 10_000,
-        maximumAge: 0,
-      });
-    });
-  }
+  // getCurrentPosition() is intentionally disabled because geolocation
+  // enforcement has been commented out. Re-enable if you need to restore
+  // the geofence behavior for production.
+  // async function getCurrentPosition(): Promise<GeolocationPosition> {
+  //   if (!navigator.geolocation) {
+  //     throw new Error("Geolocation is not supported in this browser.");
+  //   }
+  //
+  //   return await new Promise((resolve, reject) => {
+  //     navigator.geolocation.getCurrentPosition(resolve, reject, {
+  //       enableHighAccuracy: true,
+  //       timeout: 10_000,
+  //       maximumAge: 0,
+  //     });
+  //   });
+  // }
 
   async function submitEntry(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
