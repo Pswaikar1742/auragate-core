@@ -76,6 +76,7 @@ class VisitorLog(Base):
     visitor_type: Mapped[str] = mapped_column(String(32), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(24), nullable=True)
     image_payload: Mapped[str] = mapped_column(Text, nullable=True)
+    ocr_text: Mapped[str] = mapped_column(Text, nullable=True)
     secret_seed: Mapped[str] = mapped_column(String(128), nullable=True)
     group_id: Mapped[str] = mapped_column(String(64), nullable=True)
 

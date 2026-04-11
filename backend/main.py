@@ -21,7 +21,7 @@ try:
 except Exception:
     pyotp = None
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -128,6 +128,7 @@ class VisitorCheckInRequest(BaseModel):
     flat_number: str = Field(..., min_length=1, max_length=32)
     phone_number: str | None = Field(default=None, min_length=7, max_length=24)
     image_payload: str | None = None
+    image_ocr_text: str | None = None
 
 
 class VisitorPayload(BaseModel):
@@ -139,6 +140,7 @@ class VisitorPayload(BaseModel):
     flat_number: str
     phone_number: str | None = None
     image_payload: str | None = None
+    ocr_text: str | None = None
     group_id: str | None = None
     status: str
     timestamp: datetime
@@ -199,6 +201,7 @@ class UnplannedVisitorRequest(BaseModel):
     visitor_name: str | None = Field(default=None, min_length=1, max_length=120)
     phone_number: str | None = Field(default=None, min_length=7, max_length=24)
     image_payload: str | None = None
+    image_ocr_text: str | None = None
 
 
 class MultiFlatVisitorRequest(BaseModel):
@@ -209,6 +212,7 @@ class MultiFlatVisitorRequest(BaseModel):
     flat_numbers: list[str] = Field(..., min_length=1, max_length=25)
     phone_number: str | None = Field(default=None, min_length=7, max_length=24)
     image_payload: str | None = None
+    image_ocr_text: str | None = None
 
 
 class VerifyVisitorTotpRequest(BaseModel):
@@ -418,6 +422,7 @@ def _serialize_visitor(visitor: models.VisitorLog) -> VisitorPayload:
         flat_number=visitor.flat_number,
         phone_number=visitor.phone_number,
         image_payload=visitor.image_payload,
+        ocr_text=visitor.ocr_text if hasattr(visitor, 'ocr_text') else None,
         group_id=visitor.group_id,
         status=visitor.status,
         timestamp=visitor.timestamp,
@@ -651,17 +656,40 @@ def _schedule_task(coro: asyncio.Future[Any] | asyncio.Task[Any] | Any) -> None:
     task.add_done_callback(lambda finished: running_tasks.discard(finished))
 
 
-def _twilio_message(visitor_name: str, visitor_type: str, flat_number: str) -> str:
-    """Generate a clear IVR message for resident escalation call."""
+def _twilio_message(visitor: models.VisitorLog) -> str:
+    """Generate a TwiML IVR message that gathers digits and posts back to our callback.
 
+    The generated `<Gather>` action includes the `visitor_id` so the callback can
+    reliably map the response to the persisted visitor row.
+    """
+
+    visitor_id = str(visitor.id)
+
+    # Prefer an explicit public base URL for Twilio callbacks so Twilio can
+    # reach our `/api/ivr/callback` endpoint. This should be set to your
+    # externally accessible URL (e.g. https://auragate-core.vercel.app or an
+    # ngrok forwarding URL). Fall back to GOLDEN_THREAD_BASE for integration
+    # script compatibility, otherwise use a relative path (may not work with
+    # Twilio when running locally).
+    public_base = os.getenv("AURAGATE_PUBLIC_URL") or os.getenv("GOLDEN_THREAD_BASE") or ""
+    if public_base:
+        public_base = public_base.rstrip("/")
+        action_url = f"{public_base}/api/ivr/callback?visitor_id={visitor_id}"
+    else:
+        action_url = f"/api/ivr/callback?visitor_id={visitor_id}"
+
+    # Use a Gather element to capture a single digit and POST to our callback.
     return (
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
         "<Response>"
+        f"<Gather action=\"{action_url}\" method=\"POST\" numDigits=\"1\">"
         "<Say voice=\"alice\">"
         f"Alert from AuraGate at {DEMO_SOCIETY_NAME}. "
-        f"{visitor_type} visitor {visitor_name} is waiting at the gate for flat {flat_number}. "
+        f"{visitor.visitor_type} visitor {visitor.visitor_name} is waiting at the gate for flat {visitor.flat_number}. "
         "Press 1 to approve."
         "</Say>"
+        "</Gather>"
+        "<Say voice=\"alice\">No input received. Goodbye.</Say>"
         "</Response>"
     )
 
@@ -670,7 +698,7 @@ async def _trigger_ivr_call(phone_number: str, visitor: models.VisitorLog) -> st
     """Trigger an IVR call via the configured IVR adapter. Returns SID-like token on success."""
 
     adapter = _get_effective_ivr_adapter()
-    twiml = _twilio_message(visitor.visitor_name, visitor.visitor_type, visitor.flat_number)
+    twiml = _twilio_message(visitor)
 
     try:
         result = await adapter.trigger_call(phone_number, twiml)
@@ -1228,6 +1256,7 @@ async def check_in_visitor(payload: VisitorCheckInRequest, db: Session = Depends
         flat_number=flat_number,
         phone_number=phone_number,
         image_payload=payload.image_payload,
+        ocr_text=payload.image_ocr_text,
         secret_seed=secret_seed,
         status=initial_status,
     )
@@ -1345,6 +1374,7 @@ async def check_in_multi_flat_visitor(
             flat_number=flat_number,
             phone_number=phone_number,
             image_payload=payload.image_payload,
+            ocr_text=payload.image_ocr_text,
             group_id=group_id,
             status=STATUS_PENDING,
         )
@@ -1696,6 +1726,7 @@ async def create_unplanned_visitor(
         flat_number=flat_number,
         phone_number=phone_number,
         image_payload=payload.image_payload,
+        ocr_text=payload.image_ocr_text,
         status=initial_status,
     )
     db.add(visitor)
@@ -1899,6 +1930,153 @@ async def escalate(request: EscalateRequest, db: Session = Depends(get_db)) -> d
     if not call_sid:
         return {"success": False, "message": "Failed to trigger IVR Call"}
     return {"success": True, "message": "IVR Call Triggered to Resident"}
+
+
+@app.post("/api/ivr/callback")
+async def ivr_callback(request: Request, db: Session = Depends(get_db)) -> Response:
+    """Handle IVR Gather callbacks from Twilio.
+
+    Expects a POST with form-encoded fields. The `Digits` form field is used to
+    determine the resident response. We accept an optional `visitor_id` query
+    parameter (preferred). If `Digits == '1'`, mark the visitor as approved and
+    broadcast a `visitor_approved` websocket event.
+    """
+
+    form = await request.form()
+    digits = (form.get("Digits") or form.get("digits") or "").strip()
+    visitor_id_q = request.query_params.get("visitor_id")
+
+    logger.info("IVR callback received visitor_id=%s Digits=%s form_keys=%s", visitor_id_q, digits, list(form.keys()))
+
+    visitor = None
+    if visitor_id_q:
+        try:
+            vid = uuid.UUID(visitor_id_q)
+            visitor = db.get(models.VisitorLog, vid)
+        except Exception:
+            visitor = None
+
+    if visitor is None:
+        # Try to resolve by destination phone (To) -> resident -> most recent escalated visitor
+        to_phone = (form.get("To") or form.get("to") or "").strip() or None
+        if to_phone:
+            resident = db.query(models.Resident).filter(models.Resident.phone_number == to_phone).first()
+            if resident is not None:
+                visitor = (
+                    db.query(models.VisitorLog)
+                    .filter(models.VisitorLog.flat_number == resident.flat_number, models.VisitorLog.status == STATUS_ESCALATED_IVR)
+                    .order_by(models.VisitorLog.timestamp.desc())
+                    .first()
+                )
+
+    if visitor is None:
+        # Fallback: pick the most recent escalated visitor across flats
+        visitor = (
+            db.query(models.VisitorLog)
+            .filter(models.VisitorLog.status == STATUS_ESCALATED_IVR)
+            .order_by(models.VisitorLog.timestamp.desc())
+            .first()
+        )
+
+    if visitor is None:
+        xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say voice=\"alice\">No matching visitor record found. Goodbye.</Say></Response>"
+        return Response(content=xml, media_type="application/xml")
+
+    # Only handle the approval digit '1' here. Other digits are ignored but
+    # can be extended to support denial or other actions.
+    if digits == "1":
+        if visitor.status != STATUS_APPROVED:
+            resident = (
+                db.query(models.Resident)
+                .filter(models.Resident.flat_number == visitor.flat_number)
+                .first()
+            )
+
+            visitor.status = STATUS_APPROVED
+            _create_resident_notification(
+                db,
+                resident=resident,
+                flat_number=visitor.flat_number,
+                event_type="visitor_approved",
+                title="Visitor approved",
+                detail=f"You approved {visitor.visitor_name} via IVR.",
+                visitor_id=visitor.id,
+            )
+
+            auto_approved_rows: list[models.VisitorLog] = []
+            if visitor.group_id:
+                auto_approved_rows = (
+                    db.query(models.VisitorLog)
+                    .filter(
+                        models.VisitorLog.group_id == visitor.group_id,
+                        models.VisitorLog.id != visitor.id,
+                        models.VisitorLog.status != STATUS_APPROVED,
+                    )
+                    .all()
+                )
+                for sibling in auto_approved_rows:
+                    sibling.status = STATUS_APPROVED
+                    sibling_resident = (
+                        db.query(models.Resident)
+                        .filter(models.Resident.flat_number == sibling.flat_number)
+                        .first()
+                    )
+                    _create_resident_notification(
+                        db,
+                        resident=sibling_resident,
+                        flat_number=sibling.flat_number,
+                        event_type="visitor_approved",
+                        title="Visitor auto-approved",
+                        detail=(
+                            f"{sibling.visitor_name} was auto-approved because a grouped delivery was approved by another resident."
+                        ),
+                        visitor_id=sibling.id,
+                    )
+
+            db.commit()
+            db.refresh(visitor)
+            visitor_payload = _serialize_visitor(visitor)
+
+            # Notify the resident channel via WebSocket
+            await ws_manager.broadcast(
+                visitor.flat_number,
+                {
+                    "event": "visitor_approved",
+                    "visitor": visitor_payload.model_dump(mode="json"),
+                },
+            )
+
+            # Notify guard channel
+            await _broadcast_guard_event(
+                "visitor_approved",
+                visitor_payload,
+                source="ivr_approval",
+            )
+
+            for sibling in auto_approved_rows:
+                db.refresh(sibling)
+                sibling_payload = _serialize_visitor(sibling)
+                await ws_manager.broadcast(
+                    sibling.flat_number,
+                    {
+                        "event": "visitor_approved",
+                        "group_id": sibling.group_id,
+                        "visitor": sibling_payload.model_dump(mode="json"),
+                    },
+                )
+                await _broadcast_guard_event(
+                    "visitor_approved",
+                    sibling_payload,
+                    source="ivr_approval_group",
+                    extra={"group_id": sibling.group_id},
+                )
+
+        xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say voice=\"alice\">Thank you. Visitor approved. Goodbye.</Say></Response>"
+        return Response(content=xml, media_type="application/xml")
+
+    # Non-approval digits: respond politely but do not change DB state.
+    xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Response><Say voice=\"alice\">No action taken. Goodbye.</Say></Response>"
+    return Response(content=xml, media_type="application/xml")
 
 if __name__ == "__main__":
     import uvicorn
