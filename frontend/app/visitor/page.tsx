@@ -212,49 +212,62 @@ export default function VisitorPage() {
 
     setSubmitting(true);
     setFormError("");
-    setStatusText("Running geolocation moat check...");
 
-    try {
-      const position = await getCurrentPosition();
-      const { latitude, longitude } = position.coords;
-      const distanceMeters = calculateDistanceMeters(
-        latitude,
-        longitude,
-        GATE_COORDINATES.latitude,
-        GATE_COORDINATES.longitude,
-      );
+    // GEOLOCATION CHECK DISABLED
+    // The geolocation moat check has been commented out to avoid treating
+    // the backend/server location as the user's location during testing.
+    // The original code (kept below as comments) performed a browser
+    // geolocation lookup and a haversine distance comparison against a
+    // fixed `GATE_COORDINATES`. That behavior caused false "Out of Range"
+    // blocks when users tested from remote/dev environments.
+    //
+    // Original logic (commented):
+    // setStatusText("Running geolocation moat check...");
+    // try {
+    //   const position = await getCurrentPosition();
+    //   const { latitude, longitude } = position.coords;
+    //   const distanceMeters = calculateDistanceMeters(
+    //     latitude,
+    //     longitude,
+    //     GATE_COORDINATES.latitude,
+    //     GATE_COORDINATES.longitude,
+    //   );
+    //
+    //   const allowed = distanceMeters <= MAX_ALLOWED_DISTANCE_METERS;
+    //   setGeofence({ allowed, distanceMeters, latitude, longitude });
+    //
+    //   if (!allowed) {
+    //     setFormError(
+    //       `Out of Range. You are ${Math.round(distanceMeters)}m away from the society gate. Move closer and retry.`,
+    //     );
+    //     setStatusText("Out of range. Entry request blocked.");
+    //     return;
+    //   }
+    //
+    //   setStatusText("Submitting gate request...");
+    //
+    //   ...fetch call below...
+    //
+    // } catch (error) { ... }
+    // finally { setSubmitting(false); }
 
-      const allowed = distanceMeters <= MAX_ALLOWED_DISTANCE_METERS;
-      setGeofence({
-        allowed,
-        distanceMeters,
-        latitude,
-        longitude,
-      });
+    // For testing and development, skip geolocation enforcement and allow submissions.
+    setStatusText("Submitting gate request...");
+    setGeofence({ allowed: true, distanceMeters: 0, latitude: 0, longitude: 0 });
 
-      if (!allowed) {
-        setFormError(
-          `Out of Range. You are ${Math.round(distanceMeters)}m away from the society gate. Move closer and retry.`,
-        );
-        setStatusText("Out of range. Entry request blocked.");
-        return;
-      }
-
-      setStatusText("Submitting gate request...");
-
-      const response = await fetch(apiPath("/api/visitors/check-in"), {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          visitor_name: normalizedName,
-          visitor_type: "Visitor Self-Serve",
-          flat_number: normalizedFlat,
-          phone_number: normalizedMobile,
-          image_payload: selfieDataUrl,
-        }),
-      });
+    const response = await fetch(apiPath("/api/visitors/check-in"), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        visitor_name: normalizedName,
+        visitor_type: "Visitor Self-Serve",
+        flat_number: normalizedFlat,
+        phone_number: normalizedMobile,
+        image_payload: selfieDataUrl,
+      }),
+    });
 
       const payload = (await response.json().catch(() => null)) as CheckInResponse | { detail?: string } | null;
 
@@ -372,7 +385,7 @@ export default function VisitorPage() {
 
               {!selfieDataUrl ? (
                 <div className="mt-2 space-y-3">
-                  <div className="overflow-hidden border-2 border-[#1B2A47] bg-black">
+                  <div className="overflow-hidden border-2 border-[#1B2A47] bg-navy">
                     <video ref={videoRef} className="h-56 w-full object-cover" autoPlay playsInline muted />
                   </div>
                   <div className="grid grid-cols-2 gap-2">
