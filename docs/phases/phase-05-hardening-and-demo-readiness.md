@@ -111,6 +111,29 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- GitHub Actions run `24277117473` failed in `Build frontend` due to missing `jsqr` dependency resolution.
 		- included `jsqr` in committed frontend dependency manifests (`frontend/package.json`, `frontend/package-lock.json`).
 		- verified using CI-like local reinstall/build (`npm ci` + `npm run build`) before repush.
+	- Brutalist route-unification pass completed across all requested role routes:
+		- updated `frontend/app/page.tsx` to a strict 4-button role selector only (`/guard`, `/resident/login`, `/admin`, `/visitor`).
+		- updated `frontend/app/admin/page.tsx`, `frontend/app/visitor/page.tsx`, `frontend/app/resident/login/page.tsx`, `frontend/app/resident/dashboard/page.tsx`, `frontend/app/resident/[flatNumber]/page.tsx`, and `frontend/app/invite/[id]/page.tsx` to consistent white/orange brutalist UI.
+		- preserved runtime backend helpers and critical API wiring (`resolveBackendBase`/`buildApiPath`), including:
+			- admin history: `/api/visitors/history`
+			- visitor check-in: `/api/visitors/check-in` with `image_payload`
+			- resident auth/session/dashboard, approve, websocket, and invite flows.
+		- validation results:
+			- legacy class-token purge scan on all seven routes: no matches.
+			- `npm --prefix frontend run lint`: pass (existing non-blocking `<img>` warning remains in visitor page).
+			- `npm --prefix frontend run build`: pass.
+	- Guard USP feature injection completed in kiosk modal workflows while preserving brutalist visual language:
+		- Delivery modal now runs edge OCR (`Tesseract.recognize`) on captured package photo, extracts numeric tokens, and auto-fills the flat selector with status-driven UX (`RUNNING EDGE OCR...` -> `OCR COMPLETE: FLAT DETECTED`).
+		- Unknown visitor modal now includes liveness scanning UX overlay (animated green laser line over camera feed), with a modal-open 3-second analysis gate (`ANALYZING FACIAL MESH...` -> green `LIVENESS VERIFIED`) before allowing photo capture.
+		- Revalidated with `get_errors` (clean), `npm --prefix frontend run lint` (pass, existing visitor `<img>` warning), and `npm --prefix frontend run build` (pass).
+	- Production backend connectivity verification pass completed after reported disconnect symptoms:
+		- Railway endpoints verified live: `/health`, `/api/health`, `/api/guard/totp`, `/api/totp/generate`, `/api/totp/invite/{id}`, and `/openapi.json` all returned `200` during validation.
+		- Vercel guard UI verified end-to-end: expected-guest modal generated invite pass successfully and rendered visitor-id/OTP payload.
+		- Conclusion: issue not reproducible in current deployment state; likely transient or stale-session state at time of report.
+	- Root probe hardening completed after repeated base-URL `Not Found` reports:
+		- Added backend `GET /` endpoint so base-domain checks now return service metadata instead of `404`.
+		- Revalidated with backend recursive tests (`pytest -q backend/tests/test_escalate.py`, `pytest -q`) and local TestClient probes (`GET /`, `GET /health` both `200`).
+		- Note: public Railway root path reflects this only after backend redeploy.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).

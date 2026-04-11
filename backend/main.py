@@ -1029,6 +1029,18 @@ app.add_middleware(
 )
 
 
+@app.get("/")
+def root() -> dict[str, str]:
+    """Root probe endpoint for platform/domain checks."""
+
+    db_ok, _ = check_database_connection()
+    return {
+        "status": "ok" if db_ok else "degraded",
+        "service": "AuraGate Stateful Security API",
+        "health": "/health",
+    }
+
+
 @app.get("/health")
 def health() -> dict[str, str]:
     """Service and database liveness endpoint."""

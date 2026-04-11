@@ -17,6 +17,163 @@ Next Step:
 
 ---
 
+## 2026-04-11 (Cycle 36)
+- Date: 2026-04-11
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Resolve repeated "backend disconnected" report by checking Railway base URLs and hardening root probe behavior.
+- Changes Made:
+  - Updated: `backend/main.py`
+    - Added `GET /` root probe endpoint so base-domain checks return a service payload instead of `{"detail":"Not Found"}`.
+    - Root response now returns:
+      - `status` (`ok` or `degraded` based on DB connectivity)
+      - `service` (`AuraGate Stateful Security API`)
+      - `health` (`/health`)
+  - Updated docs:
+    - `docs/API_CONTRACT.md`
+    - `docs/phases/phase-05-hardening-and-demo-readiness.md`
+    - this `docs/STATE_LOG.md` entry.
+- Tests/Checks Run:
+  - Live URL checks in browser tooling before patch:
+    - `GET https://auragate-core-production.up.railway.app/` -> `404` with `{"detail":"Not Found"}`
+    - `GET https://auragate-core-production.up.railway.app/health` -> `200` with healthy DB payload.
+  - Editor diagnostics:
+    - `get_errors backend/main.py` -> no errors.
+  - Recursive backend tests:
+    - `pytest -q backend/tests/test_escalate.py` -> `2 passed`
+    - `pytest -q` -> `8 passed`
+  - Local endpoint verification:
+    - FastAPI TestClient `GET /` -> `200`
+    - FastAPI TestClient `GET /health` -> `200`
+- Results:
+  - Backend code now supports both base probe (`/`) and health probe (`/health`) semantics.
+  - This removes false outage signals caused by probing only the root path.
+- Blockers:
+  - Production Railway root URL will continue returning old behavior until the updated backend is deployed.
+- Next Step:
+  - Deploy current backend revision to Railway, then re-verify both public URLs return expected payloads.
+
+## 2026-04-11 (Cycle 35)
+- Date: 2026-04-11
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Investigate reported production backend disconnection and `/api/totp/invite/{id}` returning `{"detail":"Not Found"}`.
+- Changes Made:
+  - No source-code changes required in this cycle.
+  - Performed live production diagnostics against Railway and Vercel surfaces.
+- Tests/Checks Run:
+  - Railway route probes:
+    - `GET /health` -> `200` (database connected)
+    - `GET /api/health` -> `200`
+    - `GET /api/guard/totp` -> `200`
+    - `GET /api/totp/generate?guest_name=Test&flat_number=T4-402` -> `200`
+    - `GET /api/totp/invite/77bc487f-1575-490c-bc1a-33c6d5e9513f` -> `200`
+    - `GET /openapi.json` -> `200`
+  - Live guard page verification (`https://auragate-core.vercel.app/guard`):
+    - Opened expected guest verification modal.
+    - Generated guest pass successfully from frontend.
+    - Received success status: `GUEST QR GENERATED. SHOW THE QR TO THE VISITOR.`
+    - Observed visitor id + OTP payload rendering in modal.
+- Results:
+  - Backend is reachable and functioning in production.
+  - Invite endpoint is operational for the reported visitor id at verification time.
+  - Reported `Not Found` state was not reproducible after refresh and appears transient/stale-session related rather than a current backend code defect.
+- Blockers:
+  - None.
+- Next Step:
+  - If issue recurs, capture exact timestamp + invite id + full request URL and immediately re-run the same probe set to isolate whether it is stale invite data, deployment drift, or transient routing.
+
+## 2026-04-11 (Cycle 34)
+- Date: 2026-04-11
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Inject USP-grade guard kiosk UX features (edge OCR + liveness scan flow) into the current brutalist guard terminal while preserving style constraints.
+- Changes Made:
+  - Updated: `frontend/app/guard/page.tsx`
+    - Added edge OCR dependency import:
+      - `import Tesseract from "tesseract.js"`
+    - Delivery modal integration:
+      - In quick-delivery camera capture, after package photo capture, now runs `Tesseract.recognize(capturedImageData, "eng")`.
+      - Extracts numeric tokens from OCR output and auto-fills `flatNumber` with best-match fallback.
+      - Added OCR progress + completion state text updates:
+        - `RUNNING EDGE OCR...`
+        - `OCR COMPLETE: FLAT DETECTED`
+    - Unknown visitor liveness UX:
+      - Added modal-open 3 second liveness timer state:
+        - starts with `ANALYZING FACIAL MESH...`
+        - transitions to green `LIVENESS VERIFIED`
+      - Added video overlay scanner UI in unknown modal with animated horizontal green laser line.
+      - Enforced gating so unknown-flow `Take Photo` is disabled until liveness verification completes.
+    - Kept existing utilitarian brutalist design system and interaction structure intact (navy/cream/orange palette, hard borders/shadows).
+    - Renamed exported route component function to `GuardKioskPage` (default export remains route-compatible).
+- Tests/Checks Run:
+  - Editor diagnostics:
+    - `get_errors frontend/app/guard/page.tsx` -> no errors.
+  - Frontend lint:
+    - `CI=1 npm --prefix frontend run lint` -> pass (existing non-blocking `<img>` warning remains in `frontend/app/visitor/page.tsx`).
+  - Frontend build:
+    - `npm --prefix frontend run build` -> pass.
+- Results:
+  - Guard kiosk now includes requested USP flows directly in live modal UX without regressing existing compile/runtime behavior.
+  - OCR and liveness controls are operational and status-visible in the kiosk flow.
+- Blockers:
+  - None for this increment.
+- Next Step:
+  - Perform live browser smoke through delivery modal OCR and unknown modal liveness gate to capture screenshot evidence for Phase-05 closure artifacts.
+
+## 2026-04-11 (Cycle 33)
+- Date: 2026-04-11
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Unify role-facing frontend routes to strict white/orange brutalist styling, enforce root role selector mapping, and preserve backend wiring.
+- Changes Made:
+  - Updated: `frontend/app/page.tsx`
+    - Rebuilt home route into a 4-button operational role selector only:
+      - `/guard`
+      - `/resident/login`
+      - `/admin`
+      - `/visitor`
+  - Updated: `frontend/app/admin/page.tsx`
+    - Replaced page UI with brutalist analytics/table layout.
+    - Kept history wiring through runtime helpers:
+      - `resolveBackendBase()`
+      - `buildApiPath("/api/visitors/history?limit=120", backendBase)`
+  - Updated: `frontend/app/visitor/page.tsx`
+    - Reworked UI to brutalist style while preserving camera capture and check-in behavior.
+    - Verified `POST /api/visitors/check-in` body still includes `image_payload`.
+  - Updated: `frontend/app/resident/login/page.tsx`
+    - Reworked login UI to brutalist style while preserving:
+      - `GET /api/resident/auth/session`
+      - `POST /api/resident/auth/login`
+  - Updated: `frontend/app/resident/dashboard/page.tsx`
+    - Reworked dashboard UI to brutalist style and retained wired resident flows:
+      - auth bootstrap/session validation
+      - `GET /api/resident/dashboard`
+      - resident websocket channel
+      - `PUT /api/visitors/{id}/approve`
+      - invite generation + share path
+    - Finalized websocket event handling with explicit visitor payload narrowing to satisfy strict TypeScript state-updater typing.
+  - Updated: `frontend/app/resident/[flatNumber]/page.tsx`
+    - Replaced with brutalist flat monitor while preserving websocket subscription and approve endpoint flow.
+  - Updated: `frontend/app/invite/[id]/page.tsx`
+    - Replaced with brutalist invite pass layout while preserving dynamic TOTP QR rotation and invite-seed fetch path.
+  - Updated docs:
+    - `docs/STATE_LOG.md` (this entry)
+    - `docs/phases/phase-05-hardening-and-demo-readiness.md` (progress note for this polish increment)
+- Tests/Checks Run:
+  - Legacy style purge scan on target files (fallback grep):
+    - No matches for legacy tokens (`bg-vintage`, `text-navy`, `border-navy`, `rounded-2xl`, dark utility variants, old shadow token).
+  - Frontend lint:
+    - `CI=1 npm --prefix frontend run lint` -> pass (existing non-blocking `<img>` warning in `frontend/app/visitor/page.tsx`).
+  - Frontend build:
+    - `npm --prefix frontend run build` -> pass.
+  - Editor diagnostics check:
+    - `get_errors` on modified routes/docs -> clean after dashboard websocket typing fix.
+- Results:
+  - The requested seven routes now share a consistent brutalist presentation.
+  - Root navigation is constrained to the four requested role destinations.
+  - Required backend/data wiring was preserved and revalidated for admin, visitor, resident login, and resident dashboard/flat flows.
+- Blockers:
+  - None for this increment.
+- Next Step:
+  - Run one full live-browser golden thread across role transitions (`/` -> `/visitor` -> `/guard` -> `/resident/login` -> `/resident/dashboard` -> `/invite/[id]`) and capture screenshot evidence.
+
 ## 2026-04-11 (Cycle 32)
 - Date: 2026-04-11
 - Phase: 05 Hardening and Demo Readiness

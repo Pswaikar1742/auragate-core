@@ -13,6 +13,20 @@ This file defines the current stateful prototype API behavior.
 - `denied`
 - `escalated_ivr`
 
+## Endpoint: Root Probe
+- Method: `GET`
+- Path: `/`
+- Purpose: lightweight service probe for base-domain checks.
+
+### Success Response
+```json
+{
+  "status": "ok",
+  "service": "AuraGate Stateful Security API",
+  "health": "/health"
+}
+```
+
 ## Endpoint: Health Check
 - Method: `GET`
 - Path: `/health`
@@ -20,7 +34,10 @@ This file defines the current stateful prototype API behavior.
 ### Success Response
 ```json
 {
-	"status": "ok"
+	"status": "ok",
+	"database": "connected",
+	"database_driver": "postgresql",
+	"database_target": "aws-1-ap-northeast-1.pooler.supabase.com"
 }
 ```
 
