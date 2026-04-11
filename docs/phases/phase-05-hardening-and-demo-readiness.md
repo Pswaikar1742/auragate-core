@@ -79,6 +79,34 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- disabled geolocation gate intentionally (commented rationale in code) so invite/TOTP links proceed directly to QR + rotating OTP flow.
 		- invite pass now always renders approval-ready QR/TOTP and retry path on seed generation errors.
 		- revalidated with `npm --prefix frontend run lint` (warnings only) and `npm --prefix frontend run vercel-build` (pass).
+	- Guard camera hardening completed:
+		- replaced simulated camera placeholders in guard modals with real `getUserMedia` capture flow and per-scenario photo state (single, multi-flat, unknown, expected guest).
+		- wired captured camera snapshots as `image_payload` to `/api/visitors/check-in`, `/api/visitors/multi-flat`, and `/api/visitors/unplanned`.
+		- submit actions for camera-required flows are now gated until a photo is captured; retake flow added.
+		- revalidated with `npm --prefix frontend run lint` (pass), `npm --prefix frontend run build` (pass; existing non-blocking `<img>` warnings remain in other pages), and `pytest -q backend/tests/test_escalate.py` / `pytest -q` (2 passed).
+	- Guard expected-guest TOTP verification flow hardened end-to-end:
+		- updated `frontend/lib/runtimeConfig.ts` so production frontend defaults to Railway backend when hosted on non-Railway origins (prevents `NetworkError when attempting to fetch resource`).
+		- rebuilt guard "Scan Guest QR" modal to use camera-based QR scanning (`BarcodeDetector`) and auto-fill visitor ID + TOTP code from resident invite-pass QR payload.
+		- added explicit guard notification panel in kiosk UI for live event visibility (`visitor_checked_in`, `visitor_approved`, SOS stream entries).
+		- constrained homepage options to requested operational set: Guard Kiosk, Resident Login, Admin, and Visitor Dashboard.
+		- backend `/api/visitors/verify-totp` now supports small time skew (`valid_window=1`) and idempotent success when visitor is already approved.
+		- revalidated with `npm --prefix frontend run lint` (pass with existing non-blocking `<img>` warnings), `npm --prefix frontend run smoke` (pass), and `pytest -q backend/tests/test_escalate.py` (2 passed).
+	- Real TOTP pipeline tightened to remove mock-style invite IDs and scanner fallbacks:
+		- backend `/api/visitors/verify-totp` now enforces strict DB-seed verification (`visitor_logs.secret_seed`, 60-second TOTP interval) and rejects non-expected-guest rows for this path.
+		- backend `/api/guard/totp` now returns `503` when TOTP service is unavailable instead of emitting stub OTP values.
+		- backend invite API now requires explicit `guest_name` and `flat_number`, and response includes persisted `visitor_name`/`flat_number` metadata.
+		- added `/api/totp/invite/{visitor_id}` so invite links resolve by real DB `visitor_id` and fetch persisted seed metadata.
+		- resident dashboard invite generation now calls backend create endpoint and shares links keyed by real `visitor_id` (no random mock link id generation).
+		- invite page now loads seed from `/api/totp/invite/{id}` and rotates QR/TOTP from DB seed on the 60-second clock.
+		- guard expected-guest scanner now uses `jsqr` with live camera frame decode, auto-populates `visitor_id` + `totp`, and immediately calls verify API.
+		- guard now shows explicit full-screen `ENTRY GRANTED` (green) and `ENTRY DENIED` (red) outcomes during verification.
+		- added backend tests in `backend/tests/test_totp_flow.py` for success, invalid code, idempotent approval, and missing-seed `400` behavior.
+		- revalidated with `pytest -q backend/tests/test_totp_flow.py` (4 passed), `pytest -q backend/tests/test_totp_flow.py backend/tests/test_escalate.py` (6 passed), `npm --prefix frontend run lint` (pass, existing warnings), `npm --prefix frontend run build` (pass), and `npm --prefix frontend run smoke` (pass).
+	- Production history hardening completed after live guard-page verification surfaced `500` responses on `/api/visitors/history`:
+		- added startup schema compatibility patching for legacy `visitor_logs` deployments (auto-adds optional columns: `phone_number`, `image_payload`, `ocr_text`, `secret_seed`, `group_id`).
+		- added resilient history endpoint fallback (ORM query -> raw SQL compatibility query -> empty list fail-safe) so guard/admin pages remain functional even under schema drift.
+		- fixed visitor self-serve prefill implementation to avoid Next.js prerender failure by replacing `useSearchParams` usage with client-side `window.location.search` parsing.
+		- revalidated with `pytest -q` (8 passed), `npm --prefix frontend run lint` (pass with existing non-blocking `<img>` warnings), `npm --prefix frontend run build` (pass), and `npm --prefix frontend run smoke` (pass).
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).

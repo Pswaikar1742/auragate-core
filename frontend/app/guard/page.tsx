@@ -1,8 +1,10 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Image from "next/image";
+import { AlertTriangle, Car, Package, QrCode, ScanLine, ShieldAlert, UserRoundCheck, Users, X } from "lucide-react";
+import jsQR from "jsqr";
 import { QRCodeSVG } from "qrcode.react";
-import { AlertTriangle, Car, Camera, Package, QrCode, ShieldAlert, UserRoundCheck, Users, X } from "lucide-react";
 import {
   HEALTH_SMOKE_PATH,
   resolveBackendBase,
@@ -56,6 +58,73 @@ type GuardNotification = {
   payload: Record<string, unknown>;
 };
 
+type CaptureMode = "single" | "multi" | "unknown" | "expected";
+
+type ScannedGuestPass = {
+  visitorId: string;
+  totpCode: string;
+  raw: string;
+};
+
+type GateFlash = {
+  visible: boolean;
+  tone: "success" | "danger";
+  title: string;
+  subtitle: string;
+};
+
+const UUID_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const TOTP_REGEX = /^\d{6}$/;
+
+function parseScannedGuestPass(rawValue: string): ScannedGuestPass | null {
+  const raw = rawValue.trim();
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as { visitor_id?: unknown; totp?: unknown; scanned_code?: unknown };
+    const visitorId = typeof parsed.visitor_id === "string" ? parsed.visitor_id.trim() : "";
+    const totpCode =
+      typeof parsed.totp === "string"
+        ? parsed.totp.trim()
+        : typeof parsed.scanned_code === "string"
+          ? parsed.scanned_code.trim()
+          : "";
+    if (UUID_REGEX.test(visitorId) && TOTP_REGEX.test(totpCode)) {
+      return { visitorId, totpCode, raw };
+    }
+  } catch {
+    // Not JSON, continue with alternative parsers.
+  }
+
+  try {
+    const parsedUrl = new URL(raw);
+    const visitorId = parsedUrl.searchParams.get("visitor_id")?.trim() ?? "";
+    const totpCode =
+      parsedUrl.searchParams.get("totp")?.trim() ??
+      parsedUrl.searchParams.get("scanned_code")?.trim() ??
+      "";
+    if (UUID_REGEX.test(visitorId) && TOTP_REGEX.test(totpCode)) {
+      return { visitorId, totpCode, raw };
+    }
+  } catch {
+    // Not a URL, continue.
+  }
+
+  const compact = raw.replace(/\s+/g, "");
+  const fallbackMatch = compact.match(/([0-9a-fA-F-]{36})[^0-9]*([0-9]{6})/);
+  if (fallbackMatch) {
+    const [, visitorId, totpCode] = fallbackMatch;
+    if (UUID_REGEX.test(visitorId) && TOTP_REGEX.test(totpCode)) {
+      return { visitorId, totpCode, raw };
+    }
+  }
+
+  return null;
+}
+
 export default function GuardPage() {
   const backendBase = useMemo(() => resolveBackendBase(), []);
   const wsBase = useMemo(() => resolveWsBase(backendBase), [backendBase]);
@@ -70,7 +139,7 @@ export default function GuardPage() {
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<number | null>(null);
   const [notifications, setNotifications] = useState<GuardNotification[]>([]);
-  const [flash, setFlash] = useState<{ visible: boolean; message: string } | null>(null);
+  const [flash, setFlash] = useState<GateFlash | null>(null);
   const [flashDuration, setFlashDuration] = useState<number>(8);
   const [guestQr, setGuestQr] = useState<GuestQrPayload | null>(null);
   const [mode, setMode] = useState<"single" | "multi" | "qr" | "frequent" | "logs">("single");
@@ -82,7 +151,49 @@ export default function GuardPage() {
   const [verifyVisitorId, setVerifyVisitorId] = useState("");
   const [verifyCode, setVerifyCode] = useState("");
   const [verifying, setVerifying] = useState(false);
+  const [qrScannerActive, setQrScannerActive] = useState(false);
+  const [qrScannerError, setQrScannerError] = useState("");
+  const [lastScannedRaw, setLastScannedRaw] = useState("");
+  const [pendingAutoVerify, setPendingAutoVerify] = useState<ScannedGuestPass | null>(null);
   const [activeModal, setActiveModal] = useState<null | "single" | "multi" | "frequent" | "logs">(null);
+  const [cameraError, setCameraError] = useState("");
+  const [cameraActive, setCameraActive] = useState(false);
+  const [captureMode, setCaptureMode] = useState<CaptureMode | null>(null);
+  const [capturedImages, setCapturedImages] = useState<Record<CaptureMode, string | null>>({
+    single: null,
+    multi: null,
+    unknown: null,
+    expected: null,
+  });
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const qrScannerVideoRef = useRef<HTMLVideoElement | null>(null);
+  const qrScannerCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const qrScannerStreamRef = useRef<MediaStream | null>(null);
+  const qrScannerFrameRef = useRef<number | null>(null);
+  const qrScannerBusyRef = useRef(false);
+
+  const showGateFlash = useCallback(
+    (tone: "success" | "danger", title: string, subtitle: string) => {
+      setFlash({ visible: true, tone, title, subtitle });
+      window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
+    },
+    [flashDuration],
+  );
+
+  const visitorSelfServeUrl = useMemo(() => {
+    const params = new URLSearchParams({
+      source: "guard-kiosk",
+      flat: flatNumber,
+    });
+
+    if (typeof window === "undefined") {
+      return `/visitor?${params.toString()}`;
+    }
+
+    return `${window.location.origin}/visitor?${params.toString()}`;
+  }, [flatNumber]);
 
   // Polling keeps OTP metadata fresh so the guard sees live validity windows.
   useEffect(() => {
@@ -121,7 +232,7 @@ export default function GuardPage() {
         countdownRef.current = null;
       }
     };
-  }, [backendBase, favorites.length, flatNumber]);
+  }, [backendBase]);
 
   useEffect(() => {
     if (!wsBase) return;
@@ -157,9 +268,7 @@ export default function GuardPage() {
           const visitor = payload.visitor as Record<string, unknown>;
           const name = typeof visitor.visitor_name === "string" ? visitor.visitor_name : "Visitor";
           setStatusText(`Approved: ${name}`);
-          // flash green overlay
-          setFlash({ visible: true, message: `Approved: ${name}` });
-          window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
+          showGateFlash("success", `ENTRY GRANTED: ${name}`, "Known visitor verified by real-time TOTP.");
         }
 
         if (eventName === "sos_alert") {
@@ -183,7 +292,7 @@ export default function GuardPage() {
       if (pingIntervalId) window.clearInterval(pingIntervalId);
       if (socket) socket.close();
     };
-  }, [wsBase, flashDuration]);
+  }, [wsBase, showGateFlash]);
 
   // Fetch recent visitor history, seed flats and favorites
   const fetchVisitorHistory = useCallback(async () => {
@@ -249,18 +358,270 @@ export default function GuardPage() {
     });
   }, [backendBase]);
 
-  const qrValue = useMemo(() => {
-    if (!totp) {
-      return "auragate://loading";
+  const stopCamera = useCallback(() => {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop());
+      streamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
+  }, []);
+
+  const startCamera = useCallback(async () => {
+    setCameraError("");
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setCameraError("Camera is not supported in this browser.");
+      return;
     }
 
-    // Encode URI + current token snapshot to make the QR visibly dynamic for demos.
-    return JSON.stringify({
-      otpAuthUri: totp.otp_auth_uri,
-      currentOtp: totp.current_otp,
-      generatedAt: new Date().toISOString(),
-    });
-  }, [totp]);
+    stopCamera();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      streamRef.current = stream;
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play().catch(() => {
+          // autoplay can fail until user interaction; stream remains attached.
+        });
+      }
+
+      setCameraActive(true);
+    } catch {
+      setCameraError("Unable to access camera. Check permission and retry.");
+      setCameraActive(false);
+    }
+  }, [stopCamera]);
+
+  const stopQrScanner = useCallback(() => {
+    if (qrScannerFrameRef.current !== null) {
+      window.cancelAnimationFrame(qrScannerFrameRef.current);
+      qrScannerFrameRef.current = null;
+    }
+
+    if (qrScannerStreamRef.current) {
+      qrScannerStreamRef.current.getTracks().forEach((track) => track.stop());
+      qrScannerStreamRef.current = null;
+    }
+
+    if (qrScannerVideoRef.current) {
+      qrScannerVideoRef.current.srcObject = null;
+    }
+
+    qrScannerBusyRef.current = false;
+    setQrScannerActive(false);
+  }, []);
+
+  const startQrScanner = useCallback(async () => {
+    setQrScannerError("");
+    setLastScannedRaw("");
+    setPendingAutoVerify(null);
+    qrScannerBusyRef.current = false;
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setQrScannerError("Camera access is unavailable in this browser.");
+      return;
+    }
+
+    stopQrScanner();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        },
+        audio: false,
+      });
+
+      qrScannerStreamRef.current = stream;
+      const video = qrScannerVideoRef.current;
+      if (!video) {
+        throw new Error("Scanner preview is unavailable.");
+      }
+
+      const scannerCanvas = qrScannerCanvasRef.current;
+      if (!scannerCanvas) {
+        throw new Error("Scanner frame buffer is unavailable.");
+      }
+      const scannerContext = scannerCanvas.getContext("2d", { willReadFrequently: true });
+      if (!scannerContext) {
+        throw new Error("Scanner frame buffer context is unavailable.");
+      }
+
+      video.srcObject = stream;
+      await video.play().catch(() => {
+        // Autoplay can be blocked before user gesture.
+      });
+
+      setQrScannerActive(true);
+
+      const tick = () => {
+        const scannerVideo = qrScannerVideoRef.current;
+        if (!scannerVideo || !qrScannerStreamRef.current) {
+          return;
+        }
+
+        const width = scannerVideo.videoWidth;
+        const height = scannerVideo.videoHeight;
+
+        if (width > 0 && height > 0) {
+          if (scannerCanvas.width !== width || scannerCanvas.height !== height) {
+            scannerCanvas.width = width;
+            scannerCanvas.height = height;
+          }
+
+          scannerContext.drawImage(scannerVideo, 0, 0, width, height);
+
+          try {
+            const frame = scannerContext.getImageData(0, 0, width, height);
+            const detected = jsQR(frame.data, frame.width, frame.height, {
+              inversionAttempts: "dontInvert",
+            });
+
+            if (detected?.data) {
+              const rawValue = detected.data;
+              const parsed = parseScannedGuestPass(rawValue);
+              setLastScannedRaw(rawValue);
+
+              if (parsed) {
+                if (!qrScannerBusyRef.current) {
+                  qrScannerBusyRef.current = true;
+                  setVerifyVisitorId(parsed.visitorId);
+                  setVerifyCode(parsed.totpCode);
+                  setPendingAutoVerify(parsed);
+                  setStatusText("Guest QR scanned. Verifying now...");
+                  setQrScannerError("");
+                  stopQrScanner();
+                  return;
+                }
+              } else {
+                setQrScannerError("Scanned QR is not a valid AuraGate guest pass.");
+              }
+            }
+          } catch {
+            // Keep scanning when frame reads fail intermittently.
+          }
+        }
+
+        qrScannerFrameRef.current = window.requestAnimationFrame(() => {
+          tick();
+        });
+      };
+
+      qrScannerFrameRef.current = window.requestAnimationFrame(() => {
+        tick();
+      });
+    } catch (error) {
+      stopQrScanner();
+      setQrScannerError(error instanceof Error ? error.message : "Unable to start QR scanner.");
+    }
+  }, [stopQrScanner]);
+
+  const activeCaptureMode = useMemo<CaptureMode | null>(() => {
+    if (activeModal === "single") return "single";
+    if (activeModal === "multi") return "multi";
+    if (activeModal === "logs") return "unknown";
+    return null;
+  }, [activeModal]);
+
+  useEffect(() => {
+    if (verifyModalOpen) {
+      qrScannerBusyRef.current = false;
+      setPendingAutoVerify(null);
+      void startQrScanner();
+    } else {
+      stopQrScanner();
+      setQrScannerError("");
+      setLastScannedRaw("");
+      setPendingAutoVerify(null);
+    }
+
+    return () => {
+      if (!verifyModalOpen) {
+        stopQrScanner();
+      }
+    };
+  }, [verifyModalOpen, startQrScanner, stopQrScanner]);
+
+  useEffect(() => {
+    setCaptureMode(activeCaptureMode);
+    setCameraError("");
+
+    if (activeCaptureMode && !capturedImages[activeCaptureMode]) {
+      void startCamera();
+    }
+
+    if (!activeCaptureMode) {
+      stopCamera();
+    }
+
+    return () => {
+      if (!activeCaptureMode) {
+        stopCamera();
+      }
+    };
+  }, [activeCaptureMode, capturedImages, startCamera, stopCamera]);
+
+  useEffect(() => {
+    return () => {
+      stopCamera();
+      stopQrScanner();
+    };
+  }, [stopCamera, stopQrScanner]);
+
+  const capturePhoto = useCallback(() => {
+    const mode = captureMode;
+    const video = videoRef.current;
+    const canvas = canvasRef.current;
+
+    if (!mode || !video || !canvas) {
+      setCameraError("Camera is not ready yet.");
+      return;
+    }
+
+    const width = video.videoWidth || 1280;
+    const height = video.videoHeight || 720;
+
+    if (width === 0 || height === 0) {
+      setCameraError("No frame available. Please try again.");
+      return;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      setCameraError("Unable to capture frame.");
+      return;
+    }
+
+    ctx.drawImage(video, 0, 0, width, height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.9);
+    setCapturedImages((prev) => ({ ...prev, [mode]: dataUrl }));
+    setStatusText("Photo captured. Ready to submit.");
+    stopCamera();
+  }, [captureMode, stopCamera]);
+
+  const retakePhoto = useCallback(() => {
+    const mode = captureMode;
+    if (!mode) return;
+    setCapturedImages((prev) => ({ ...prev, [mode]: null }));
+    void startCamera();
+  }, [captureMode, startCamera]);
 
   const performCheckIn = async () => {
     setSubmitting(true);
@@ -281,6 +642,7 @@ export default function GuardPage() {
           visitor_name: visitorName,
           visitor_type: visitorType,
           flat_number: flatNumber,
+          image_payload: capturedImages.single,
         }),
       });
 
@@ -296,6 +658,7 @@ export default function GuardPage() {
       const payload = (await response.json()) as VisitorResponse;
       setStatusText(`${payload.message} Visitor ID: ${payload.visitor.id}`);
       setVisitorName("");
+      setCapturedImages((prev) => ({ ...prev, single: null }));
 
       // clear any running countdown
       if (countdownRef.current) {
@@ -380,7 +743,12 @@ export default function GuardPage() {
       const response = await fetch(apiPath, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitor_name: visitorName || "Delivery", visitor_type: visitorType, flat_numbers: flats }),
+        body: JSON.stringify({
+          visitor_name: visitorName || "Delivery",
+          visitor_type: visitorType,
+          flat_numbers: flats,
+          image_payload: capturedImages.multi,
+        }),
       });
 
       if (!response.ok) {
@@ -392,6 +760,7 @@ export default function GuardPage() {
       setStatusText(`${payload.message} Group ID: ${payload.group_id}`);
       setVisitorName("");
       setMultiFlats("");
+      setCapturedImages((prev) => ({ ...prev, multi: null }));
     } catch (error) {
       setStatusText(error instanceof Error ? error.message : "Unexpected multi-flat error.");
     } finally {
@@ -407,11 +776,18 @@ export default function GuardPage() {
 
   // Guest QR generation (visitor scans and verifies themselves)
   const generateGuestQr = async () => {
+    const normalizedVisitorName = visitorName.trim();
+
+    if (!normalizedVisitorName) {
+      setStatusText("Guest name is required to generate a pass.");
+      return;
+    }
+
     setStatusText("");
     try {
       const api = backendBase
-        ? `${backendBase}/api/totp/generate?guest_name=${encodeURIComponent(visitorName || "Guest Pass")}&flat_number=${encodeURIComponent(flatNumber)}`
-        : `/api/totp/generate?guest_name=${encodeURIComponent(visitorName || "Guest Pass")}&flat_number=${encodeURIComponent(flatNumber)}`;
+        ? `${backendBase}/api/totp/generate?guest_name=${encodeURIComponent(normalizedVisitorName)}&flat_number=${encodeURIComponent(flatNumber)}`
+        : `/api/totp/generate?guest_name=${encodeURIComponent(normalizedVisitorName)}&flat_number=${encodeURIComponent(flatNumber)}`;
       const response = await fetch(api, { cache: "no-store" });
       if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -486,35 +862,70 @@ export default function GuardPage() {
   };
 
   // TOTP verify for expected guest
-  const verifyTotp = async () => {
-    if (!verifyVisitorId || !verifyCode) return setStatusText("visitor id and code required");
-    setVerifying(true);
-    setStatusText("");
-    try {
-      const api = backendBase ? `${backendBase}/api/visitors/verify-totp` : `/api/visitors/verify-totp`;
-      const res = await fetch(api, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ visitor_id: verifyVisitorId, scanned_code: verifyCode }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Verification failed");
+  const verifyTotp = useCallback(
+    async (override?: { visitorId: string; totpCode: string }) => {
+      const normalizedVisitorId = (override?.visitorId ?? verifyVisitorId).trim();
+      const normalizedCode = (override?.totpCode ?? verifyCode).trim();
+
+      if (!normalizedVisitorId || !normalizedCode) {
+        setStatusText("Visitor ID and 6-digit pass code are required.");
+        qrScannerBusyRef.current = false;
+        return;
       }
-      await res.json();
-      setStatusText("Verification success — approved.");
-      setFlash({ visible: true, message: `Approved: ${verifyVisitorId}` });
-      window.setTimeout(() => setFlash(null), (flashDuration || 8) * 1000);
-      setVerifyModalOpen(false);
-      setVerifyVisitorId("");
-      setVerifyCode("");
-      void fetchVisitorHistory();
-    } catch (err) {
-      setStatusText(err instanceof Error ? err.message : "Verification failed");
-    } finally {
-      setVerifying(false);
+
+      setVerifying(true);
+      setStatusText("");
+      try {
+        const api = backendBase ? `${backendBase}/api/visitors/verify-totp` : `/api/visitors/verify-totp`;
+        const res = await fetch(api, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ visitor_id: normalizedVisitorId, scanned_code: normalizedCode }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          const detail = typeof err?.detail === "string" ? err.detail : "Verification failed";
+
+          if ([400, 401, 404].includes(res.status)) {
+            setStatusText(`Entry denied: ${detail}`);
+            showGateFlash("danger", "ENTRY DENIED", "Invalid or expired guest pass. Reissue and rescan.");
+            return;
+          }
+
+          throw new Error(detail);
+        }
+
+        await res.json();
+        setStatusText("Entry granted. Guest approved by TOTP.");
+        showGateFlash("success", "ENTRY GRANTED", "Known visitor verified by real-time TOTP.");
+        setVerifyModalOpen(false);
+        setVerifyVisitorId("");
+        setVerifyCode("");
+        void fetchVisitorHistory();
+      } catch (err) {
+        if (err instanceof TypeError) {
+          const baseHint = backendBase || "https://auragate-core-production.up.railway.app";
+          setStatusText(`Verification failed: backend unreachable at ${baseHint}`);
+        } else {
+          setStatusText(err instanceof Error ? err.message : "Verification failed");
+        }
+      } finally {
+        setVerifying(false);
+        qrScannerBusyRef.current = false;
+      }
+    },
+    [backendBase, fetchVisitorHistory, showGateFlash, verifyCode, verifyVisitorId],
+  );
+
+  useEffect(() => {
+    if (!pendingAutoVerify) {
+      return;
     }
-  };
+
+    void verifyTotp({ visitorId: pendingAutoVerify.visitorId, totpCode: pendingAutoVerify.totpCode });
+    setPendingAutoVerify(null);
+  }, [pendingAutoVerify, verifyTotp]);
 
   // Random visitor generator using unplanned endpoint
   const generateRandomVisitor = async () => {
@@ -555,6 +966,7 @@ export default function GuardPage() {
           category: "Unknown",
           flat_number: flatNumber,
           visitor_name: visitorName || "Unknown",
+          image_payload: capturedImages.unknown,
         }),
       });
       if (!res.ok) {
@@ -563,6 +975,7 @@ export default function GuardPage() {
       }
       const payload = await res.json();
       setStatusText(payload.message || "Unknown visitor logged and resident alerted.");
+      setCapturedImages((prev) => ({ ...prev, unknown: null }));
       void fetchVisitorHistory();
     } catch (err) {
       setStatusText(err instanceof Error ? err.message : "Unknown visitor flow failed");
@@ -625,8 +1038,71 @@ export default function GuardPage() {
   const modalInputClass = "w-full border-4 border-navy bg-white px-4 py-4 text-xl font-semibold text-navy outline-none focus:border-safety";
   const modalLabelClass = "block border border-slate-300/80 bg-white/30 px-2 py-1 text-xs font-bold uppercase tracking-[0.24em] text-navy/70";
 
+  const renderCameraCapture = (mode: CaptureMode, title: string) => {
+    const capturedImage = capturedImages[mode];
+    const isCurrentMode = captureMode === mode;
+
+    return (
+      <div className="border-4 border-navy bg-white p-4">
+        <div className="relative aspect-video w-full overflow-hidden border-2 border-navy bg-vintage">
+          {capturedImage ? (
+            <Image
+              src={capturedImage}
+              alt={`${mode} capture`}
+              fill
+              unoptimized
+              className="object-cover"
+            />
+          ) : (
+            <video
+              ref={isCurrentMode ? videoRef : null}
+              className="h-full w-full object-cover"
+              autoPlay
+              muted
+              playsInline
+            />
+          )}
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-black uppercase tracking-[0.14em] text-navy">{title}</p>
+
+          {capturedImage ? (
+            <button
+              type="button"
+              onClick={retakePhoto}
+              className="border-2 border-navy bg-vintage px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-navy"
+            >
+              Retake Photo
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => {
+                if (!cameraActive || !isCurrentMode) {
+                  void startCamera();
+                  return;
+                }
+                capturePhoto();
+              }}
+              className="border-2 border-navy bg-navy px-3 py-2 text-xs font-black uppercase tracking-[0.12em] text-white"
+            >
+              {cameraActive ? "Take Photo" : "Enable Camera"}
+            </button>
+          )}
+        </div>
+
+        {isCurrentMode && cameraError ? (
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.08em] text-danger">{cameraError}</p>
+        ) : null}
+      </div>
+    );
+  };
+
   return (
     <>
+      <canvas ref={canvasRef} className="hidden" />
+      <canvas ref={qrScannerCanvasRef} className="hidden" />
       <main className="h-screen overflow-hidden bg-vintage px-3 py-3 text-navy sm:p-5 lg:p-7">
         <div className="mx-auto flex h-full w-full max-w-[1700px] flex-col gap-4 pb-20">
           <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -724,6 +1200,48 @@ export default function GuardPage() {
             </div>
           </section>
 
+          <section className="border-4 border-navy bg-white p-3 shadow-[4px_4px_0px_#1B2A47]">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-sm font-black uppercase tracking-[0.16em] text-navy">Notification Panel</p>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-navy/70">Live events: {notifications.length}</p>
+            </div>
+            {notifications.length === 0 ? (
+              <p className="border-2 border-navy bg-vintage px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-navy/70">
+                No events yet. Visitor check-ins and approvals will stream here.
+              </p>
+            ) : (
+              <div className="max-h-28 space-y-2 overflow-y-auto">
+                {notifications.slice(0, 8).map((item, index) => {
+                  const eventName =
+                    typeof item.payload.event === "string"
+                      ? item.payload.event.replaceAll("_", " ")
+                      : "guard event";
+                  const visitor =
+                    typeof item.payload.visitor === "object" && item.payload.visitor !== null
+                      ? (item.payload.visitor as Record<string, unknown>)
+                      : null;
+                  const visitorName =
+                    visitor && typeof visitor.visitor_name === "string" ? visitor.visitor_name : "Unknown Visitor";
+
+                  return (
+                    <article
+                      key={`${item.received_at}-${index}`}
+                      className="flex items-center justify-between gap-3 border-2 border-navy bg-vintage px-3 py-2 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate font-black uppercase tracking-[0.12em] text-navy">{eventName}</p>
+                        <p className="truncate font-semibold text-navy/80">{visitorName}</p>
+                      </div>
+                      <p className="shrink-0 font-bold uppercase tracking-[0.1em] text-navy/60">
+                        {new Date(item.received_at).toLocaleTimeString()}
+                      </p>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
           <section className="flex flex-wrap items-center gap-2 border-2 border-navy bg-white px-3 py-2 text-xs font-bold uppercase tracking-[0.16em] shadow-[3px_3px_0px_#1B2A47]">
             <button
               type="button"
@@ -784,20 +1302,48 @@ export default function GuardPage() {
             </div>
 
             <div className="grid gap-4">
-              <div className="border-4 border-navy bg-white p-5 text-center">
-                <div className="flex justify-center">
-                  {loadingTotp ? (
-                    <p className="text-lg font-bold uppercase tracking-[0.2em] text-navy/70">Loading QR...</p>
-                  ) : (
-                    <QRCodeSVG value={qrValue} size={160} bgColor="#FFFFFF" fgColor="#1B2A47" />
-                  )}
+              <div className="border-4 border-navy bg-white p-4">
+                <p className="text-sm font-black uppercase tracking-[0.14em] text-navy">QR Scanner</p>
+                <div className="mt-2 overflow-hidden border-2 border-navy bg-vintage">
+                  <video ref={qrScannerVideoRef} className="h-56 w-full object-cover" autoPlay muted playsInline />
                 </div>
-                <p className="mt-3 text-lg font-black uppercase tracking-[0.16em] text-navy">Camera Simulated For Demo</p>
-                {totp ? (
-                  <p className="mt-2 text-sm font-semibold uppercase tracking-[0.12em] text-navy/70">
-                    Live OTP: {totp.current_otp} • Valid {totp.valid_for_seconds}s
+                <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                  <button
+                    type="button"
+                    onClick={() => void startQrScanner()}
+                    className="inline-flex w-full items-center justify-center gap-2 border-2 border-navy bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-navy hover:bg-safety hover:text-white"
+                  >
+                    <ScanLine className="h-4 w-4" />
+                    {qrScannerActive ? "Rescan" : "Start Scanner"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={stopQrScanner}
+                    disabled={!qrScannerActive}
+                    className="inline-flex w-full items-center justify-center gap-2 border-2 border-navy bg-navy px-3 py-2 text-xs font-black uppercase tracking-[0.14em] text-white hover:bg-safety disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    Stop Scanner
+                  </button>
+                </div>
+                <p className="mt-2 text-xs font-semibold uppercase tracking-[0.1em] text-navy/70">
+                  {qrScannerActive
+                    ? "Scanner active. Show visitor pass QR in front of camera."
+                    : "Scanner idle. Start scanner to read visitor pass QR."}
+                </p>
+                {qrScannerError ? (
+                  <p className="mt-2 border-2 border-danger bg-danger/10 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-danger">
+                    {qrScannerError}
                   </p>
                 ) : null}
+                {lastScannedRaw ? (
+                  <p className="mt-2 border-2 border-navy bg-vintage px-3 py-2 text-[11px] font-semibold text-navy/80">
+                    Last scanned payload: {lastScannedRaw}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="border-2 border-navy bg-vintage px-3 py-2 text-xs font-bold uppercase tracking-[0.12em] text-navy/70">
+                Guard TOTP heartbeat: {loadingTotp ? "loading" : totp?.current_otp ?? "unavailable"}
               </div>
 
               <div>
@@ -848,7 +1394,7 @@ export default function GuardPage() {
                   onClick={() => void generateGuestQr()}
                   className="w-full border-4 border-navy bg-white px-4 py-5 text-xl font-black uppercase tracking-[0.16em] text-navy shadow-[4px_4px_0px_#1B2A47] transition hover:bg-safety hover:text-white"
                 >
-                  Scan QR
+                  Generate Guest Pass
                 </button>
                 <button
                   type="button"
@@ -903,14 +1449,11 @@ export default function GuardPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-center gap-3 border-4 border-navy bg-white px-4 py-8 text-navy">
-                <Camera className="h-9 w-9" />
-                <span className="text-3xl font-black uppercase tracking-[0.16em]">Capture Package</span>
-              </div>
+              {renderCameraCapture("single", "Capture package")}
 
               <button
                 type="submit"
-                disabled={submitting}
+                disabled={submitting || !capturedImages.single}
                 className="w-full border-4 border-navy bg-navy px-4 py-5 text-3xl font-black uppercase tracking-[0.16em] text-white shadow-[4px_4px_0px_#F25C05] transition hover:bg-safety disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? "Submitting..." : "Notify Resident"}
@@ -962,14 +1505,11 @@ export default function GuardPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-center gap-3 border-4 border-navy bg-white px-4 py-8 text-navy">
-                <Camera className="h-9 w-9" />
-                <span className="text-3xl font-black uppercase tracking-[0.16em]">Capture Package Group</span>
-              </div>
+              {renderCameraCapture("multi", "Capture package group")}
 
               <button
                 type="submit"
-                disabled={submitting || selectedMultiFlats.size === 0}
+                disabled={submitting || selectedMultiFlats.size === 0 || !capturedImages.multi}
                 className="w-full border-4 border-navy bg-navy px-4 py-5 text-3xl font-black uppercase tracking-[0.16em] text-white shadow-[4px_4px_0px_#F25C05] transition hover:bg-safety disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {submitting ? "Submitting..." : `Ping ${selectedMultiFlats.size} Residents`}
@@ -1094,16 +1634,25 @@ export default function GuardPage() {
                 />
               </div>
 
-              <div className="flex items-center justify-center gap-3 border-4 border-navy bg-white px-4 py-8 text-navy">
-                <Camera className="h-9 w-9" />
-                <span className="text-3xl font-black uppercase tracking-[0.16em]">Take Liveness Selfie</span>
-              </div>
+                <div className="border-2 border-navy bg-white p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.14em] text-navy">Unknown Visitor Self-Serve QR</p>
+                  <div className="mt-3 flex justify-center">
+                    <div className="border-2 border-navy bg-vintage p-2 shadow-[2px_2px_0px_#1B2A47]">
+                      <QRCodeSVG value={visitorSelfServeUrl} size={160} includeMargin />
+                    </div>
+                  </div>
+                  <p className="mt-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-navy/80">
+                    Ask unknown visitors to scan this code on their own phone and complete selfie + details on the visitor dashboard.
+                  </p>
+                </div>
+
+              {renderCameraCapture("unknown", "Take liveness selfie")}
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   type="button"
                   onClick={() => void submitUnknownVisitor()}
-                  disabled={submitting}
+                  disabled={submitting || !capturedImages.unknown}
                   className="w-full border-4 border-navy bg-navy px-4 py-5 text-xl font-black uppercase tracking-[0.16em] text-white shadow-[4px_4px_0px_#F25C05] transition hover:bg-safety disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {submitting ? "Running..." : "Run Identity Check and Alert"}
@@ -1164,10 +1713,10 @@ export default function GuardPage() {
       ) : null}
 
       {flash && flash.visible ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-safety/95 text-white">
-          <div className="max-w-lg rounded-lg border-2 border-white/20 bg-safety/100 p-8 text-center shadow-xl">
-            <h3 className="text-3xl font-black">{flash.message}</h3>
-            <p className="mt-2 text-lg">Approved — show to guard for recognition.</p>
+        <div className={`fixed inset-0 z-50 flex items-center justify-center text-white ${flash.tone === "success" ? "bg-safety/95" : "bg-danger/95"}`}>
+          <div className={`max-w-lg rounded-lg border-2 border-white/20 p-8 text-center shadow-xl ${flash.tone === "success" ? "bg-safety" : "bg-danger"}`}>
+            <h3 className="text-3xl font-black">{flash.title}</h3>
+            <p className="mt-2 text-lg">{flash.subtitle}</p>
           </div>
         </div>
       ) : null}

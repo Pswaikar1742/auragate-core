@@ -9,6 +9,8 @@ import { buildApiPath, resolveBackendBase } from "../../../lib/runtimeConfig";
 
 type InviteTotpSeedResponse = {
   visitor_id: string;
+  visitor_name: string;
+  flat_number: string;
   secret_seed: string;
   interval_seconds: number;
 };
@@ -26,28 +28,28 @@ export default function InvitePassPage() {
   const [validFor, setValidFor] = useState(60);
   const [pulseKey, setPulseKey] = useState(0);
 
-  const inviteId = params.id;
-  const guestName = useMemo(
-    () => searchParams.get("guest")?.trim() || `Guest-${inviteId}`,
-    [inviteId, searchParams],
-  );
+  const inviteId = useMemo(() => (params.id || "").trim(), [params.id]);
   const visitPurpose = useMemo(
     () => searchParams.get("purpose")?.trim() || "General Visit",
     [searchParams],
   );
-  const flatNumber = useMemo(() => searchParams.get("flat")?.trim() || "T4-402", [searchParams]);
-  const flatHint = flatNumber;
-  const guestLabel = `${guestName}-${inviteId}`;
+  const guestName = inviteTotp?.visitor_name || "";
+  const flatHint = inviteTotp?.flat_number || "";
+  const inviteLabel = useMemo(() => {
+    if (inviteTotp?.visitor_name) {
+      return `${inviteTotp.visitor_name}-${inviteTotp.visitor_id}`;
+    }
+    return inviteId;
+  }, [inviteId, inviteTotp]);
 
   const loadTotpSeed = useCallback(async () => {
+    if (!inviteId) {
+      throw new Error("Invite link is invalid.");
+    }
+
     setLoadingSeed(true);
     setErrorMessage("");
-    const guestQuery = encodeURIComponent(guestLabel);
-    const flatQuery = encodeURIComponent(flatNumber);
-    const apiPath = buildApiPath(
-      `/api/totp/generate?guest_name=${guestQuery}&flat_number=${flatQuery}`,
-      backendBase,
-    );
+    const apiPath = buildApiPath(`/api/totp/invite/${encodeURIComponent(inviteId)}`, backendBase);
     const response = await fetch(apiPath, { cache: "no-store" });
     if (!response.ok) {
       throw new Error(`Could not generate invite QR (HTTP ${response.status}).`);
@@ -61,13 +63,13 @@ export default function InvitePassPage() {
     setInviteTotp(payload);
     setPulseKey((value) => value + 1);
     setLoadingSeed(false);
-  }, [backendBase, flatNumber, guestLabel]);
+  }, [backendBase, inviteId]);
 
   const generateTotpCode = useCallback(
     (secretSeed: string, intervalSeconds: number): string => {
       const totp = new OTPAuth.TOTP({
         issuer: "AuraGate Invite",
-        label: guestLabel,
+        label: inviteLabel,
         algorithm: "SHA1",
         digits: 6,
         period: intervalSeconds,
@@ -75,7 +77,7 @@ export default function InvitePassPage() {
       });
       return totp.generate();
     },
-    [guestLabel],
+    [inviteLabel],
   );
 
   useEffect(() => {
@@ -149,7 +151,7 @@ export default function InvitePassPage() {
           </div>
           <h1 className="headline mt-2 text-3xl text-navy">Visitor Pass #{inviteId}</h1>
           <p className="mt-1 text-xs text-navy/70">
-            {guestName} • {visitPurpose} • {flatHint}
+            {guestName || "Loading guest"} • {visitPurpose} • {flatHint || "Loading flat"}
           </p>
 
           {loadingSeed && (

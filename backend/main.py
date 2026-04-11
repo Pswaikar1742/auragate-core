@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 try:
     # Prefer an absolute package import (works when the project root is
@@ -184,6 +184,8 @@ class InviteTotpResponse(BaseModel):
     """TOTP payload for visitor invite pass generation."""
 
     visitor_id: str
+    visitor_name: str
+    flat_number: str
     secret_seed: str
     provisioned_uri: str
     # Keep `secret` for backwards compatibility with existing invite UI payload parsing.
@@ -219,7 +221,7 @@ class VerifyVisitorTotpRequest(BaseModel):
     """Payload for validating visitor TOTP at gate."""
 
     visitor_id: str = Field(..., min_length=1, max_length=64)
-    scanned_code: str = Field(..., min_length=4, max_length=12)
+    scanned_code: str = Field(..., min_length=6, max_length=6)
 
 
 class VerifyVisitorTotpResponse(BaseModel):
@@ -388,6 +390,16 @@ admin_ws_manager = ConnectionManager()
 guard_ws_manager = ConnectionManager()
 running_tasks: set[asyncio.Task[None]] = set()
 
+# Backward-compatible schema patch list for deployed DBs that predate
+# newer visitor workflow columns.
+VISITOR_LOGS_OPTIONAL_COLUMNS: dict[str, str] = {
+    "phone_number": "VARCHAR(24)",
+    "image_payload": "TEXT",
+    "ocr_text": "TEXT",
+    "secret_seed": "VARCHAR(128)",
+    "group_id": "VARCHAR(64)",
+}
+
 
 async def _broadcast_guard_event(
     event: str,
@@ -427,6 +439,131 @@ def _serialize_visitor(visitor: models.VisitorLog) -> VisitorPayload:
         status=visitor.status,
         timestamp=visitor.timestamp,
     )
+
+
+def _ensure_visitor_logs_schema_compatibility() -> None:
+    """Apply idempotent `visitor_logs` column patches for legacy deployments."""
+
+    driver = database_driver_name()
+    if not (driver.startswith("sqlite") or driver.startswith("postgres")):
+        return
+
+    try:
+        with SessionLocal() as db:
+            if driver.startswith("sqlite"):
+                rows = db.execute(text("PRAGMA table_info('visitor_logs')")).mappings().all()
+                existing_columns = {
+                    str(row.get("name")).lower()
+                    for row in rows
+                    if row.get("name")
+                }
+            else:
+                rows = db.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'visitor_logs'
+                        """
+                    )
+                ).mappings().all()
+                existing_columns = {
+                    str(row.get("column_name")).lower()
+                    for row in rows
+                    if row.get("column_name")
+                }
+
+            changed = False
+            for column_name, column_type in VISITOR_LOGS_OPTIONAL_COLUMNS.items():
+                if column_name in existing_columns:
+                    continue
+                logger.warning(
+                    "Applying schema compatibility patch: visitor_logs.%s (%s)",
+                    column_name,
+                    column_type,
+                )
+                db.execute(text(f"ALTER TABLE visitor_logs ADD COLUMN {column_name} {column_type}"))
+                changed = True
+
+            if changed:
+                db.commit()
+    except Exception:
+        logger.exception("Failed to apply schema compatibility patch for visitor_logs")
+
+
+def _parse_legacy_history_timestamp(raw_value: Any) -> datetime:
+    """Parse timestamp values from fallback SQL rows into timezone-aware datetimes."""
+
+    if isinstance(raw_value, datetime):
+        return raw_value if raw_value.tzinfo else raw_value.replace(tzinfo=timezone.utc)
+
+    if isinstance(raw_value, str):
+        candidate = raw_value.strip()
+        if candidate:
+            try:
+                parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+                return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+
+    return datetime.now(timezone.utc)
+
+
+def _coerce_legacy_history_id(raw_value: Any, index: int) -> uuid.UUID:
+    """Convert legacy DB id values into UUIDs expected by API response models."""
+
+    if isinstance(raw_value, uuid.UUID):
+        return raw_value
+
+    candidate = str(raw_value or "").strip()
+    if candidate:
+        try:
+            return uuid.UUID(candidate)
+        except ValueError:
+            return uuid.uuid5(uuid.NAMESPACE_URL, f"legacy-visitor-{candidate}")
+
+    return uuid.uuid5(uuid.NAMESPACE_URL, f"legacy-visitor-row-{index}")
+
+
+def _fallback_visitor_history_query(db: Session, limit: int) -> list[VisitorPayload]:
+    """Read minimal visitor history via raw SQL when ORM query fails."""
+
+    rows = db.execute(
+        text(
+            """
+            SELECT
+                CAST(id AS TEXT) AS id,
+                visitor_name,
+                visitor_type,
+                flat_number,
+                status,
+                timestamp
+            FROM visitor_logs
+            ORDER BY timestamp DESC
+            LIMIT :limit
+            """
+        ),
+        {"limit": limit},
+    ).mappings().all()
+
+    payload_rows: list[VisitorPayload] = []
+    for index, row in enumerate(rows):
+        payload_rows.append(
+            VisitorPayload(
+                id=_coerce_legacy_history_id(row.get("id"), index),
+                visitor_name=str(row.get("visitor_name") or "Visitor"),
+                visitor_type=str(row.get("visitor_type") or "Unknown"),
+                flat_number=str(row.get("flat_number") or "Unknown"),
+                phone_number=None,
+                image_payload=None,
+                ocr_text=None,
+                group_id=None,
+                status=str(row.get("status") or STATUS_PENDING),
+                timestamp=_parse_legacy_history_timestamp(row.get("timestamp")),
+            )
+        )
+
+    return payload_rows
 
 
 def _serialize_resident(resident: models.Resident) -> ResidentProfilePayload:
@@ -849,6 +986,7 @@ async def lifespan(_: FastAPI):
             raise RuntimeError("Database connectivity check failed during startup.")
         # DB is available and required — ensure schema and demo data exist.
         create_db_and_tables()
+        _ensure_visitor_logs_schema_compatibility()
         _seed_demo_residents()
     else:
         # DB not required at startup: attempt initialization only when reachable.
@@ -860,6 +998,7 @@ async def lifespan(_: FastAPI):
             )
             try:
                 create_db_and_tables()
+                _ensure_visitor_logs_schema_compatibility()
                 _seed_demo_residents()
             except Exception:
                 logger.exception("Database init attempted but failed; continuing without DB init")
@@ -1429,13 +1568,23 @@ def get_visitor_history(
 ) -> VisitorHistoryResponse:
     """Return recent visitor records for admin analytics and audit display."""
 
-    rows = (
-        db.query(models.VisitorLog)
-        .order_by(models.VisitorLog.timestamp.desc())
-        .limit(limit)
-        .all()
-    )
-    return VisitorHistoryResponse(visitors=[_serialize_visitor(row) for row in rows])
+    try:
+        rows = (
+            db.query(models.VisitorLog)
+            .order_by(models.VisitorLog.timestamp.desc())
+            .limit(limit)
+            .all()
+        )
+        return VisitorHistoryResponse(visitors=[_serialize_visitor(row) for row in rows])
+    except Exception:
+        logger.exception("Visitor history ORM query failed; attempting fallback query")
+        db.rollback()
+
+    try:
+        return VisitorHistoryResponse(visitors=_fallback_visitor_history_query(db, limit))
+    except Exception:
+        logger.exception("Visitor history fallback query failed; returning empty response")
+        return VisitorHistoryResponse(visitors=[])
 
 
 @app.put("/api/visitors/{visitor_id}/approve", response_model=VisitorMutationResponse)
@@ -1543,15 +1692,7 @@ async def approve_visitor(visitor_id: uuid.UUID, db: Session = Depends(get_db)) 
 def get_guard_totp() -> GuardTotpResponse:
     """Return a TOTP secret and current code for rendering guard QR workflow."""
     if pyotp is None:
-        # Fallback when pyotp is not installed (tests/CI): return a stubbed response
-        valid_for_seconds = TOTP_INTERVAL_SECONDS - (int(time.time()) % TOTP_INTERVAL_SECONDS)
-        return GuardTotpResponse(
-            secret=GUARD_TOTP_SECRET,
-            otp_auth_uri="",
-            current_otp="000000",
-            valid_for_seconds=valid_for_seconds,
-            interval_seconds=TOTP_INTERVAL_SECONDS,
-        )
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TOTP service unavailable")
 
     totp = pyotp.TOTP(GUARD_TOTP_SECRET, interval=TOTP_INTERVAL_SECONDS)
     otp_uri = totp.provisioning_uri(
@@ -1571,8 +1712,8 @@ def get_guard_totp() -> GuardTotpResponse:
 
 @app.get("/api/totp/generate", response_model=InviteTotpResponse)
 def generate_invite_totp(
-    guest_name: str = Query(default="Guest Pass", min_length=1, max_length=120),
-    flat_number: str = Query(default="T4-402", min_length=1, max_length=32),
+    guest_name: str = Query(..., min_length=1, max_length=120),
+    flat_number: str = Query(..., min_length=1, max_length=32),
     db: Session = Depends(get_db),
 ) -> InviteTotpResponse:
     """Generate and persist a visitor-scoped TOTP seed for expected guest verification."""
@@ -1608,10 +1749,47 @@ def generate_invite_totp(
 
     return InviteTotpResponse(
         visitor_id=str(visitor.id),
+        visitor_name=visitor.visitor_name,
+        flat_number=visitor.flat_number,
         secret_seed=secret_seed,
         provisioned_uri=provisioned_uri,
         secret=secret_seed,
         current_otp=current_otp,
+        valid_for_seconds=valid_for_seconds,
+        interval_seconds=invite_interval_seconds,
+    )
+
+
+@app.get("/api/totp/invite/{visitor_id}", response_model=InviteTotpResponse)
+def get_invite_totp_seed(
+    visitor_id: uuid.UUID,
+    db: Session = Depends(get_db),
+) -> InviteTotpResponse:
+    """Return the persisted invite seed for an existing visitor row."""
+
+    if pyotp is None:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="TOTP service unavailable")
+
+    visitor = db.get(models.VisitorLog, visitor_id)
+    if visitor is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    if not visitor.secret_seed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visitor does not have a provisioned TOTP seed")
+
+    invite_interval_seconds = 60
+    valid_for_seconds = invite_interval_seconds - (int(time.time()) % invite_interval_seconds)
+    totp = pyotp.TOTP(visitor.secret_seed, interval=invite_interval_seconds)
+    provisioned_uri = totp.provisioning_uri(name=visitor.visitor_name, issuer_name="AuraGate Invite")
+
+    return InviteTotpResponse(
+        visitor_id=str(visitor.id),
+        visitor_name=visitor.visitor_name,
+        flat_number=visitor.flat_number,
+        secret_seed=visitor.secret_seed,
+        provisioned_uri=provisioned_uri,
+        secret=visitor.secret_seed,
+        current_otp=totp.now(),
         valid_for_seconds=valid_for_seconds,
         interval_seconds=invite_interval_seconds,
     )
@@ -1635,6 +1813,12 @@ async def verify_visitor_totp(
     visitor = db.get(models.VisitorLog, visitor_uuid)
     if visitor is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Visitor not found")
+
+    if visitor.status == STATUS_APPROVED:
+        return VerifyVisitorTotpResponse(success=True, status="APPROVED")
+
+    if visitor.visitor_type.strip().lower() != "expected guest":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="TOTP verification is only available for expected guests")
 
     if not visitor.secret_seed:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Visitor does not have a provisioned TOTP seed")

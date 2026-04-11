@@ -81,6 +81,7 @@ function geolocationErrorMessage(error: GeolocationPositionError): string {
 
 export default function VisitorPage() {
   const backendBase = useMemo(() => resolveBackendBase(), []);
+  const [presetFlatNumber, setPresetFlatNumber] = useState("");
 
   const [visitorName, setVisitorName] = useState("");
   const [flatNumber, setFlatNumber] = useState("");
@@ -113,6 +114,23 @@ export default function VisitorPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const queryFlat = new URLSearchParams(window.location.search).get("flat")?.trim().toUpperCase() || "";
+    if (queryFlat) {
+      setPresetFlatNumber(queryFlat);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (presetFlatNumber) {
+      setFlatNumber(presetFlatNumber);
+    }
+  }, [presetFlatNumber]);
 
   async function startCamera() {
     setCameraError("");
@@ -319,6 +337,9 @@ export default function VisitorPage() {
     } catch (error) {
       if (error instanceof GeolocationPositionError) {
         setFormError(geolocationErrorMessage(error));
+      } else if (error instanceof TypeError) {
+        const baseHint = backendBase || "https://auragate-core-production.up.railway.app";
+        setFormError(`Network error while contacting backend. Expected API host: ${baseHint}`);
       } else if (error instanceof Error) {
         setFormError(error.message);
       } else {

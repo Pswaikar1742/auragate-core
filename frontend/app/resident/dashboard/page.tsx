@@ -91,6 +91,10 @@ type ResidentNotificationsResponse = {
   notifications: ResidentNotification[];
 };
 
+type InviteSeedResponse = {
+  visitor_id: string;
+};
+
 type AlertLevel = "info" | "success" | "warning";
 
 type ResidentAlert = {
@@ -174,6 +178,7 @@ export default function ResidentDashboardPage() {
   const [inviteId, setInviteId] = useState("");
   const [inviteLink, setInviteLink] = useState("");
   const [inviteError, setInviteError] = useState("");
+  const [generatingInvite, setGeneratingInvite] = useState(false);
   const [copyDone, setCopyDone] = useState(false);
   const [sharing, setSharing] = useState(false);
 
@@ -635,27 +640,55 @@ export default function ResidentDashboardPage() {
     }
   };
 
-  const generateInvite = () => {
+  const generateInvite = async () => {
     const normalizedGuest = guestName.trim();
     if (!normalizedGuest) {
       setInviteError("Guest name is required before generating an invite.");
       return;
     }
 
-    const generatedId = Math.random().toString(36).slice(2, 8);
-    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3001";
-    const params = new URLSearchParams({
-      guest: normalizedGuest,
-      purpose: guestPurpose.trim() || "Personal Visit",
-      flat: residentFlat,
-    });
-    const generatedLink = `${origin}/invite/${generatedId}?${params.toString()}`;
-
+    setGeneratingInvite(true);
     setInviteError("");
-    setInviteId(generatedId);
-    setInviteLink(generatedLink);
-    setCopyDone(false);
-    pushAlert("info", "Secure invite generated", `${normalizedGuest} can now open the secure visitor pass link.`);
+
+    try {
+      const params = new URLSearchParams({
+        guest_name: normalizedGuest,
+        flat_number: residentFlat,
+      });
+      const response = await fetch(buildApiPath(`/api/totp/generate?${params.toString()}`), {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        const errorPayload = await response.json().catch(() => ({}));
+        throw new Error(
+          typeof errorPayload?.detail === "string"
+            ? errorPayload.detail
+            : `Invite generation failed (HTTP ${response.status}).`,
+        );
+      }
+
+      const payload = (await response.json()) as InviteSeedResponse;
+      if (!payload.visitor_id) {
+        throw new Error("Invite generation returned an invalid visitor id.");
+      }
+
+      const origin = window.location.origin;
+      const linkParams = new URLSearchParams({
+        purpose: guestPurpose.trim() || "Personal Visit",
+      });
+      const generatedLink = `${origin}/invite/${payload.visitor_id}?${linkParams.toString()}`;
+
+      setInviteId(payload.visitor_id);
+      setInviteLink(generatedLink);
+      setCopyDone(false);
+      pushAlert("info", "Secure invite generated", `${normalizedGuest} can now open the secure visitor pass link.`);
+    } catch (error) {
+      setInviteError(error instanceof Error ? error.message : "Unable to generate invite right now.");
+    } finally {
+      setGeneratingInvite(false);
+    }
   };
 
   const shareInviteViaWhatsApp = () => {
@@ -1087,10 +1120,11 @@ export default function ResidentDashboardPage() {
 
             <button
               type="button"
-              onClick={generateInvite}
+              onClick={() => void generateInvite()}
+              disabled={generatingInvite}
               className="mt-4 w-full border-2 border-navy bg-navy px-3 py-2.5 text-sm font-black uppercase tracking-wider text-white hover:bg-safety"
             >
-              Generate Secure Link
+              {generatingInvite ? "Generating..." : "Generate Secure Link"}
             </button>
 
             {inviteLink && (
@@ -1128,8 +1162,8 @@ export default function ResidentDashboardPage() {
                   <Link
                     href={
                       inviteId
-                        ? `/invite/${inviteId}?guest=${encodeURIComponent(guestName)}&purpose=${encodeURIComponent(guestPurpose)}&flat=${encodeURIComponent(residentFlat)}`
-                        : "/invite/demo-pass"
+                        ? `/invite/${inviteId}?purpose=${encodeURIComponent(guestPurpose)}`
+                        : "/resident/dashboard"
                     }
                     className="inline-flex items-center justify-center gap-2 border-2 border-navy bg-white px-3 py-2 text-sm font-black uppercase tracking-wider text-navy hover:bg-navy hover:text-white"
                   >
