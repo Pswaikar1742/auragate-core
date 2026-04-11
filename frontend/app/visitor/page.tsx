@@ -255,7 +255,8 @@ export default function VisitorPage() {
     setStatusText("Submitting gate request...");
     setGeofence({ allowed: true, distanceMeters: 0, latitude: 0, longitude: 0 });
 
-    const response = await fetch(apiPath("/api/visitors/check-in"), {
+    try {
+      const response = await fetch(apiPath("/api/visitors/check-in"), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
