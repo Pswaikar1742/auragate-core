@@ -17,6 +17,31 @@ Next Step:
 
 ---
 
+## 2026-04-11 (Cycle 32)
+- Date: 2026-04-11
+- Phase: 05 Hardening and Demo Readiness
+- Prompt Summary: Resolve post-push CI failure and ensure frontend build pipeline stability.
+- Changes Made:
+  - Updated: `frontend/package.json`
+    - Added missing runtime dependency entry for `jsqr` used by guard QR scanner.
+  - Updated: `frontend/package-lock.json`
+    - Synced lockfile to include `jsqr` for deterministic CI installs.
+  - Updated docs:
+    - `docs/STATE_LOG.md` (this entry)
+    - `docs/phases/phase-05-hardening-and-demo-readiness.md` (CI remediation notes)
+- Tests/Checks Run:
+  - Investigated CI run `24277117473` logs (`Build frontend` failed with `Module not found: Can't resolve 'jsqr'`).
+  - Local CI-like verification:
+    - `npm --prefix frontend ci`
+    - `npm --prefix frontend run build` -> pass.
+- Results:
+  - Root cause identified and fixed as dependency manifest drift.
+  - Frontend build now succeeds after clean dependency install.
+- Blockers:
+  - Awaiting rerun/new CI pass after pushing the dependency fix commit.
+- Next Step:
+  - Push dependency-fix commit and confirm GitHub Actions run turns green.
+
 ## 2026-04-11 (Cycle 31)
 - Date: 2026-04-11
 - Phase: 05 Hardening and Demo Readiness

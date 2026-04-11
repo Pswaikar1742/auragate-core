@@ -107,6 +107,10 @@ Prepare a stable and presentation-ready MVP with operational confidence.
 		- added resilient history endpoint fallback (ORM query -> raw SQL compatibility query -> empty list fail-safe) so guard/admin pages remain functional even under schema drift.
 		- fixed visitor self-serve prefill implementation to avoid Next.js prerender failure by replacing `useSearchParams` usage with client-side `window.location.search` parsing.
 		- revalidated with `pytest -q` (8 passed), `npm --prefix frontend run lint` (pass with existing non-blocking `<img>` warnings), `npm --prefix frontend run build` (pass), and `npm --prefix frontend run smoke` (pass).
+	- CI remediation after push:
+		- GitHub Actions run `24277117473` failed in `Build frontend` due to missing `jsqr` dependency resolution.
+		- included `jsqr` in committed frontend dependency manifests (`frontend/package.json`, `frontend/package-lock.json`).
+		- verified using CI-like local reinstall/build (`npm ci` + `npm run build`) before repush.
 
 Remaining Phase-05 focus:
 	- Final UI polish pass (visual/state polish, additional friendly guidance).
