@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "lucide-react": "^1.8.0",
+    "tesseract.js": "^2.1.5",
     "next": "14.2.14",
     "otpauth": "^9.5.0",
     "qrcode.react": "^4.2.0",

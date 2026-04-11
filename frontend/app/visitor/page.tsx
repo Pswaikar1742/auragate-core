@@ -255,6 +255,22 @@ export default function VisitorPage() {
     setStatusText("Submitting gate request...");
     setGeofence({ allowed: true, distanceMeters: 0, latitude: 0, longitude: 0 });
 
+    // Perform optional client-side OCR on the captured selfie. This is
+    // best-effort and will not block the check-in if it fails.
+    let imageOcrText = "";
+    try {
+      const { extractOcrText } = await import("../../lib/ocr");
+      setStatusText("Performing OCR on selfie...");
+      // give the UI a chance to render the status change
+      // eslint-disable-next-line @typescript-eslint/await-thenable
+      imageOcrText = await extractOcrText(selfieDataUrl);
+    } catch (err) {
+      // non-fatal
+      // eslint-disable-next-line no-console
+      console.warn("OCR step failed:", err);
+      imageOcrText = "";
+    }
+
     try {
       const response = await fetch(apiPath("/api/visitors/check-in"), {
       method: "POST",
@@ -267,6 +283,7 @@ export default function VisitorPage() {
         flat_number: normalizedFlat,
         phone_number: normalizedMobile,
         image_payload: selfieDataUrl,
+        image_ocr_text: imageOcrText,
       }),
     });
 
